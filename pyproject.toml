@@ -10,9 +10,11 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.14"
 dependencies = [
+    "beartype"
 ]
 
 [project.optional-dependencies]
 dev = [
+    "pycodestyle",
     "pytest",
 ]

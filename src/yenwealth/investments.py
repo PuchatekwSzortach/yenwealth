@@ -5,20 +5,29 @@ Module with investment logic
 import decimal
 import logging
 
+import beartype
+
 from . import constants
 
 
 LOGGER = logging.getLogger(__name__)
 
 
+@beartype.beartype
 class OrdinaryInvestmentAccount:
 
-    def __init__(self, investment_return_rate: decimal.Decimal, capital_gain_tax_rate: decimal.Decimal):
+    def __init__(
+        self,
+        principal: decimal.Decimal,
+        gain: decimal.Decimal,
+        investment_return_rate: decimal.Decimal,
+        capital_gain_tax_rate: decimal.Decimal
+    ):
 
         self.investment_return_rate = investment_return_rate
         self.capital_gain_tax_rate = capital_gain_tax_rate
-        self.principal = decimal.Decimal("0")
-        self.gain = decimal.Decimal("0")
+        self.principal = principal
+        self.gain = gain
 
     @property
     def portfolio_value(self) -> decimal.Decimal:

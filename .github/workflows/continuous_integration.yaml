@@ -15,3 +15,5 @@ jobs:
           pip install -e ".[dev]"
       - name: run tests
         run: pytest ./tests
+      - name: run static code analysis
+        run: pycodestyle ./src ./tests
