@@ -494,7 +494,7 @@ class InvestmentManager:
             "total_portfolio_value": self.portfolio_value
         }
 
-    def get_formatted_portfolio_summary_description(self) -> dict[str, str]:
+    def get_formatted_portfolio_summary_description(self) -> str:
 
         return "\n".join(
             f"{key}: {value / constants.MILLION:.3f} mln yen"

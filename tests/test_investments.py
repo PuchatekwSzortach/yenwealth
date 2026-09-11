@@ -412,3 +412,105 @@ class TestInvestmentPolicy:
 
         assert policy.ideco.withdrawal_start_age == 75
         assert policy.ideco.withdrawal_period_in_years == 20
+
+
+class TestInvestmentManager:
+
+    @pytest.fixture
+    def investment_manager(self):
+
+        # 1. Ordinary Account: 0 principal, 0 gain, 0 tax for simple math
+        ordinary = yenwealth.investments.OrdinaryInvestmentAccount(
+            principal=decimal.Decimal("0"),
+            gain=decimal.Decimal("0"),
+            investment_return_rate=decimal.Decimal("0.05"),
+            capital_gain_tax_rate=decimal.Decimal("0.20")
+        )
+
+        # 2. iDeCo Account: 0 initial portfolio
+        ideco = yenwealth.investments.IdecoInvestmentAccount(
+            portfolio_value=decimal.Decimal("0"),
+            investment_return_rate=decimal.Decimal("0.05")
+        )
+
+        # 3. Old NISA Account: empty year map
+        old_nisa = yenwealth.investments.OldNisaAccount(
+            year_to_portfolio_map={},
+            investment_return_rate=decimal.Decimal("0.05")
+        )
+
+        # 4. NISA Account: 0 principal, 0 gain
+        nisa = yenwealth.investments.NisaAccount(
+            principal=decimal.Decimal("0"),
+            gain=decimal.Decimal("0"),
+            investment_return_rate=decimal.Decimal("0.05")
+        )
+
+        # 5. Investment Policy: Withdrawal starts at age 75 for 20 years
+        policy = yenwealth.investments.InvestmentPolicy(
+            ideco=yenwealth.investments.IdecoPolicy(
+                withdrawal_start_age=75,
+                withdrawal_period_in_years=20
+            )
+        )
+
+        return yenwealth.investments.InvestmentManager(
+            ordinary_investment_account=ordinary,
+            ideco_investment_account=ideco,
+            old_nisa_account=old_nisa,
+            nisa_account=nisa,
+            investment_policy=policy,
+            start_age=30,
+            start_year=2024
+        )
+
+    def test_deposit_priority(self, investment_manager):
+
+        # Deposit 5,000,000 Yen at age 30
+        # Expected order: iDeCo (max 276,000) -> NISA (max 3,600,000) -> Ordinary (rest: 1,124,000)
+        investment_manager.deposit(amount=decimal.Decimal("5_000_000"), age=30)
+
+        assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal("276_000")
+        assert investment_manager.nisa_account.principal == decimal.Decimal("3_600_000")
+        assert investment_manager.ordinary_investment_account.principal == decimal.Decimal("1_124_000")
+
+    def test_withdraw_priority(self, investment_manager):
+
+        # Setup initial balances directly
+        investment_manager.ordinary_investment_account.principal = decimal.Decimal("1_000_000")
+        investment_manager.old_nisa_account.year_to_portfolio_map = {2010: decimal.Decimal("500_000")}
+        investment_manager.nisa_account.principal = decimal.Decimal("2_000_000")
+
+        # Withdraw 2,000,000 Yen
+        # Expected order: Ordinary (1,000,000) -> Old NISA (500,000) -> NISA (500,000)
+        withdrawn = investment_manager.withdraw(desired_cash=decimal.Decimal("2_000_000"))
+
+        assert withdrawn == decimal.Decimal("2_000_000")
+        assert investment_manager.ordinary_investment_account.portfolio_value == decimal.Decimal("0")
+        assert investment_manager.old_nisa_account.portfolio_value == decimal.Decimal("0")
+        assert investment_manager.nisa_account.portfolio_value == decimal.Decimal("1_500_000")
+
+    def test_optimize_investments_old_nisa_liquidation(self, investment_manager):
+
+        # Current year = start_year (2024) + age (50) - start_age (30) = 2044
+        # 20 years prior = 2024. Populate Old NISA portfolio for 2024
+        investment_manager.old_nisa_account.year_to_portfolio_map = {2024: decimal.Decimal("1_000_000")}
+
+        investment_manager.optimize_investments(age=50)
+
+        # 2024 Old NISA portfolio should be removed and moved into NISA Account
+        assert 2024 not in investment_manager.old_nisa_account.year_to_portfolio_map
+        assert investment_manager.nisa_account.principal == decimal.Decimal("1_000_000")
+
+    def test_optimize_investments_ideco_lump_sum_and_nisa_topup(self, investment_manager):
+
+        investment_manager.ideco_investment_account.portfolio_value = decimal.Decimal("10_000_000")
+
+        # Set age to policy withdrawal_start_age (75)
+        investment_manager.optimize_investments(age=75)
+
+        # 1. iDeCo 10M transferred to Ordinary Account tax-free
+        # 2. Ordinary Account then transfers 3.6M (annual limit) to NISA Account
+        assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal("0")
+        assert investment_manager.nisa_account.principal == decimal.Decimal("3_600_000")
+        assert investment_manager.ordinary_investment_account.principal == decimal.Decimal("6_400_000")
