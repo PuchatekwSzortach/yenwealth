@@ -151,3 +151,57 @@ class TestOrdinaryInvestmentAccount:
         assert math.isclose(investment_account.gain, decimal.Decimal("210"), rel_tol=1e-2)
 
         assert investment_account.max_cash_withdrawal == decimal.Decimal("1168")
+
+
+class TestIdecoInvestmentAccount:
+
+    def test_withdrawing_pensions_without_initializing_it_first(self):
+
+        ideco = yenwealth.investments.IdecoInvestmentAccount(
+            portfolio_value=decimal.Decimal("100"),
+            investment_return_rate=decimal.Decimal("0")
+        )
+
+        with pytest.raises(ValueError):
+            ideco.withdraw_pension(70)
+
+    def test_withdrawing_pensions(self):
+
+        period_in_years = 5
+
+        ideco = yenwealth.investments.IdecoInvestmentAccount(
+            portfolio_value=decimal.Decimal("100"),
+            investment_return_rate=decimal.Decimal("0")
+        )
+
+        ideco.start_pension_scheme(
+            start_age=70,
+            period_in_years=period_in_years
+        )
+
+        # First withdrawal
+        portfolio_value_before_withdrawal = ideco.portfolio_value
+        amount = ideco.withdraw_pension(age=70)
+        assert abs(amount - (portfolio_value_before_withdrawal / 5)) < decimal.Decimal("0.001")
+
+        # Second withdrawal
+        portfolio_value_before_withdrawal = ideco.portfolio_value
+        amount = ideco.withdraw_pension(age=71)
+        assert abs(amount - (portfolio_value_before_withdrawal / 4)) < decimal.Decimal("0.001")
+
+        # Third withdrawal
+        portfolio_value_before_withdrawal = ideco.portfolio_value
+        amount = ideco.withdraw_pension(age=72)
+        assert abs(amount - (portfolio_value_before_withdrawal / 3)) < decimal.Decimal("0.001")
+
+        # # Fourth withdrawal
+        portfolio_value_before_withdrawal = ideco.portfolio_value
+        amount = ideco.withdraw_pension(age=73)
+        assert abs(amount - (portfolio_value_before_withdrawal / 2)) < decimal.Decimal("0.001")
+
+        # Last withdrawal
+        portfolio_value_before_withdrawal = ideco.portfolio_value
+        amount = ideco.withdraw_pension(age=74)
+        assert abs(amount - portfolio_value_before_withdrawal) < decimal.Decimal("0.001")
+
+        assert ideco.portfolio_value == decimal.Decimal("0")
