@@ -278,3 +278,120 @@ class TestOldNisaAccount:
 
         assert nisa.year_to_portfolio_map[2020] == decimal.Decimal("0")
         assert nisa.year_to_portfolio_map[2021] == decimal.Decimal("30")
+
+
+class TestNisaAccount:
+
+    def test_initial_deposit_over_max_limit(self):
+
+        with pytest.raises(ValueError):
+
+            yenwealth.investments.NisaAccount(
+                principal=decimal.Decimal("20") * yenwealth.constants.MILLION,
+                gain=decimal.Decimal("0"),
+                investment_return_rate=decimal.Decimal("0")
+            )
+
+    def test_deposit_over_annual_limit(self):
+
+        nisa = yenwealth.investments.NisaAccount(
+            principal=decimal.Decimal("0"),
+            gain=decimal.Decimal("0"),
+            investment_return_rate=decimal.Decimal("0")
+        )
+
+        # Within limit
+        nisa.deposit(amount=decimal.Decimal("2_000_000"), year=2025)
+
+        with pytest.raises(ValueError):
+
+            # Over limit for targer year
+            nisa.deposit(amount=decimal.Decimal("2_000_000"), year=2025)
+
+    def test_deposit(self):
+
+        nisa = yenwealth.investments.NisaAccount(
+            principal=decimal.Decimal("0"),
+            gain=decimal.Decimal("0"),
+            investment_return_rate=decimal.Decimal("0")
+        )
+
+        nisa.deposit(amount=decimal.Decimal("2_000_000"), year=2025)
+
+        assert nisa.principal == decimal.Decimal("2_000_000")
+        assert nisa.year_to_deposit_map[2025] == decimal.Decimal("2_000_000")
+        assert nisa.portfolio_value == decimal.Decimal("2_000_000")
+
+        nisa.deposit(amount=decimal.Decimal("1_000_000"), year=2025)
+
+        assert nisa.principal == decimal.Decimal("3_000_000")
+        assert nisa.year_to_deposit_map[2025] == decimal.Decimal("3_000_000")
+        assert nisa.portfolio_value == decimal.Decimal("3_000_000")
+
+        nisa.deposit(amount=decimal.Decimal("1_000_000"), year=2026)
+
+        assert nisa.principal == decimal.Decimal("4_000_000")
+        assert nisa.year_to_deposit_map[2025] == decimal.Decimal("3_000_000")
+        assert nisa.year_to_deposit_map[2026] == decimal.Decimal("1_000_000")
+        assert nisa.portfolio_value == decimal.Decimal("4_000_000")
+
+    def test_advance_one_year(self):
+
+        nisa = yenwealth.investments.NisaAccount(
+            principal=decimal.Decimal("100"),
+            gain=decimal.Decimal("0"),
+            investment_return_rate=decimal.Decimal("0.1")
+        )
+
+        nisa.advance_one_year()
+
+        assert nisa.principal == decimal.Decimal("100")
+        assert nisa.gain == decimal.Decimal("10")
+        assert nisa.portfolio_value == decimal.Decimal("110")
+
+        nisa.deposit(amount=decimal.Decimal("50"), year=2025)
+
+        assert nisa.principal == decimal.Decimal("150")
+        assert nisa.gain == decimal.Decimal("10")
+        assert nisa.portfolio_value == decimal.Decimal("160")
+
+        nisa.advance_one_year()
+
+        assert nisa.principal == decimal.Decimal("150")
+        assert nisa.gain == decimal.Decimal("26")
+        assert nisa.portfolio_value == decimal.Decimal("176")
+
+    def test_withdrawal_over_portolio_value(self):
+
+        nisa = yenwealth.investments.NisaAccount(
+            principal=decimal.Decimal("100"),
+            gain=decimal.Decimal("100"),
+            investment_return_rate=decimal.Decimal("0")
+        )
+
+        with pytest.raises(ValueError):
+
+            nisa.withdraw(decimal.Decimal("210"))
+
+    def test_withdrawal(self):
+
+        initial_principal = decimal.Decimal("100")
+        initial_portfolio_value = decimal.Decimal("200")
+
+        nisa = yenwealth.investments.NisaAccount(
+            principal=initial_principal,
+            gain=initial_portfolio_value - initial_principal,
+            investment_return_rate=decimal.Decimal("0")
+        )
+
+        assert nisa.principal == initial_principal
+        assert nisa.gain == decimal.Decimal("100")
+        assert nisa.portfolio_value == initial_portfolio_value
+
+        desired_amount = decimal.Decimal("50")
+
+        nisa.withdraw(desired_amount)
+
+        assert nisa.portfolio_value == decimal.Decimal("150")
+        assert nisa.gain == decimal.Decimal("75")
+        assert nisa.principal == decimal.Decimal("75")

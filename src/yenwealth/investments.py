@@ -2,6 +2,7 @@
 Module with investment logic
 """
 
+import collections
 import copy
 import decimal
 import logging
@@ -228,3 +229,71 @@ class OldNisaAccount:
 
             if total_withdrawal == desired_cash:
                 return
+
+
+@beartype.beartype
+class NisaAccount:
+    """
+    NISA account
+    """
+
+    def __init__(
+        self,
+        principal: decimal.Decimal,
+        gain: decimal.Decimal,
+        investment_return_rate: decimal.Decimal
+    ):
+
+        self.annual_deposit_limit = decimal.Decimal("3.6") * constants.MILLION
+        self.total_deposit_limit = decimal.Decimal("18") * constants.MILLION
+
+        if principal > self.total_deposit_limit:
+            raise ValueError(f"Principal {principal} exceeds total deposit limit of {self.total_deposit_limit}")
+
+        self.principal = principal
+        self.gain = gain
+        self.investment_return_rate = investment_return_rate
+
+        self.year_to_deposit_map = collections.defaultdict(decimal.Decimal)
+
+    @property
+    def portfolio_value(self) -> decimal.Decimal:
+        return self.principal + self.gain
+
+    def deposit(self, amount: decimal.Decimal, year: int):
+
+        if amount < 0:
+            raise ValueError(f"Deposit amount should be non-negative, got {amount}")
+
+        if self.principal + amount > self.total_deposit_limit:
+
+            message = f"With deposit {amount}, principal would exceed total deposit limit of {self.total_deposit_limit}"
+            raise ValueError(message)
+
+        deposit_for_target_year = self.year_to_deposit_map[year]
+
+        if deposit_for_target_year + amount > self.annual_deposit_limit:
+            message = (
+                f"With deposit {amount}, annual deposit limit of {self.annual_deposit_limit} would be exceeded. "
+                f"Current deposit for year {year} is {deposit_for_target_year}"
+            )
+            raise ValueError(message)
+
+        self.year_to_deposit_map[year] += amount
+        self.principal += amount
+
+    def advance_one_year(self):
+
+        self.gain += self.investment_return_rate * (self.principal + self.gain)
+
+    def withdraw(self, desired_amount: decimal.Decimal):
+
+        if desired_amount > self.portfolio_value:
+            raise ValueError(f"Desired amount {desired_amount} exceeds portfolio value {self.portfolio_value}")
+
+        gain_ratio = self.portfolio_value / self.principal
+
+        principal_withdrawn = desired_amount / gain_ratio
+
+        self.principal -= principal_withdrawn
+        self.gain -= desired_amount - principal_withdrawn
