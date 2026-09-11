@@ -395,3 +395,20 @@ class TestNisaAccount:
         assert nisa.portfolio_value == decimal.Decimal("150")
         assert nisa.gain == decimal.Decimal("75")
         assert nisa.principal == decimal.Decimal("75")
+
+
+class TestInvestmentPolicy:
+
+    def test_construction_with_valid_data(self):
+
+        policy = yenwealth.investments.InvestmentPolicy.model_validate(
+            {
+                "ideco": {
+                    "withdrawal_start_age": 75,
+                    "withdrawal_period_in_years": 20
+                }
+            }
+        )
+
+        assert policy.ideco.withdrawal_start_age == 75
+        assert policy.ideco.withdrawal_period_in_years == 20
