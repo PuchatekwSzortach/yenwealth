@@ -2,6 +2,7 @@
 Module with investment logic
 """
 
+import copy
 import decimal
 import logging
 
@@ -162,3 +163,68 @@ class IdecoInvestmentAccount:
         self.pension_payout_ages.append(age)
 
         return withdrawal
+
+
+@beartype.beartype
+class OldNisaAccount:
+    """
+    Old NISA account that no longer allows deposit, and requires investments to be withdrawn within 20 years
+    from when they were made.
+    """
+
+    def __init__(self, year_to_portfolio_map: dict[int, decimal.Decimal], investment_return_rate: decimal.Decimal):
+
+        self.year_to_portfolio_map = copy.deepcopy(year_to_portfolio_map)
+        self.investment_return_rate = investment_return_rate
+
+    def advance_one_year(self, year: int):
+
+        for investment_year in self.year_to_portfolio_map.keys():
+
+            if investment_year + 20 < year:
+                raise ValueError(f"nisa investment for year {investment_year} must be liquidated")
+
+            self.year_to_portfolio_map[investment_year] = \
+                self.year_to_portfolio_map[investment_year] * (1 + self.investment_return_rate)
+
+    @property
+    def portfolio_value(self) -> decimal.Decimal:
+
+        return decimal.Decimal(sum(self.year_to_portfolio_map.values()))
+
+    def withdraw_for_year(self, portfolio_year: int, desired_cash: decimal.Decimal):
+        """
+        Withdraw from portfolio established on portfolio_year
+        """
+
+        portfolio_value = self.year_to_portfolio_map[portfolio_year]
+
+        if portfolio_value < desired_cash:
+            raise ValueError(f"Portfolio value for {portfolio_year} is not large enough")
+
+        self.year_to_portfolio_map[portfolio_year] -= desired_cash
+
+    def withdraw(self, desired_cash: decimal.Decimal):
+        """
+        Withdraw from portfolio in order of oldest to newest
+        """
+
+        if desired_cash < 0:
+            raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
+
+        if desired_cash > self.portfolio_value:
+            raise ValueError(
+                f"Withdrawal value {desired_cash} exceeds portfolio value {self.portfolio_value}"
+            )
+
+        total_withdrawal = decimal.Decimal("0")
+
+        for investment_year in sorted(self.year_to_portfolio_map.keys()):
+
+            withdrawal_from_year = min(desired_cash - total_withdrawal, self.year_to_portfolio_map[investment_year])
+
+            self.withdraw_for_year(portfolio_year=investment_year, desired_cash=withdrawal_from_year)
+            total_withdrawal += withdrawal_from_year
+
+            if total_withdrawal == desired_cash:
+                return
