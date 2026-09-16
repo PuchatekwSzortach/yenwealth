@@ -6,6 +6,7 @@ import collections
 import copy
 import decimal
 import logging
+import typing
 
 import beartype
 import pydantic
@@ -310,8 +311,42 @@ class InvestmentPolicy(pydantic.BaseModel):
     ideco: IdecoPolicy
 
 
-@beartype.beartype
-class InvestmentManager:
+class InvestmentManager(typing.Protocol):
+
+    @property
+    def portfolio_value(self) -> decimal.Decimal:
+        ...
+
+    @property
+    def after_tax_portfolio_value(self) -> decimal.Decimal:
+        ...
+
+    def advance_one_year(self, year):
+        ...
+
+    def deposit(self, amount: decimal.Decimal, age: int):
+        ...
+
+    def withdraw(self, desired_cash: decimal.Decimal) -> decimal.Decimal:
+        ...
+
+    def optimize_investments(self, age: int):
+        ...
+
+    def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
+        ...
+
+    def get_formatted_portfolio_summary_description(self) -> str:
+        ...
+
+
+class SimpleInvestmentManager:
+    """
+    Investment manager with a strategy that:
+    - prioritizes depositing into NISA before ordinary account
+    - prioritizes withdrawing fron ordinary account before NISA
+    - withdraws half iDeCO funds at pension start time,
+    """
 
     def __init__(
         self,
@@ -343,6 +378,15 @@ class InvestmentManager:
     def portfolio_value(self) -> decimal.Decimal:
         return \
             self.ordinary_investment_account.portfolio_value + \
+            self.ideco_investment_account.portfolio_value + \
+            self.old_nisa_account.portfolio_value + \
+            self.nisa_account.portfolio_value
+
+    @property
+    def after_tax_portfolio_value(self) -> decimal.Decimal:
+
+        return \
+            self.ordinary_investment_account.max_cash_withdrawal + \
             self.ideco_investment_account.portfolio_value + \
             self.old_nisa_account.portfolio_value + \
             self.nisa_account.portfolio_value

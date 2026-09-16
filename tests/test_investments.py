@@ -454,7 +454,7 @@ class TestInvestmentManager:
             )
         )
 
-        return yenwealth.investments.InvestmentManager(
+        return yenwealth.investments.SimpleInvestmentManager(
             ordinary_investment_account=ordinary,
             ideco_investment_account=ideco,
             old_nisa_account=old_nisa,
