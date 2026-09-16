@@ -6,14 +6,13 @@ import collections
 import copy
 import decimal
 import logging
+import typing
 
 import beartype
 import pydantic
 import returns.maybe
 
-from . import constants
-from . import utilities
-
+from . import constants, utilities
 
 LOGGER = logging.getLogger(__name__)
 
@@ -182,7 +181,7 @@ class OldNisaAccount:
 
     def advance_one_year(self, year: int):
 
-        for investment_year in self.year_to_portfolio_map.keys():
+        for investment_year in self.year_to_portfolio_map:
 
             if investment_year + 20 < year:
                 raise ValueError(f"nisa investment for year {investment_year} must be liquidated")
@@ -220,7 +219,7 @@ class OldNisaAccount:
                 f"Withdrawal value {desired_cash} exceeds portfolio value {self.portfolio_value}"
             )
 
-        total_withdrawal = decimal.Decimal("0")
+        total_withdrawal = decimal.Decimal(0)
 
         for investment_year in sorted(self.year_to_portfolio_map.keys()):
 
@@ -247,7 +246,7 @@ class NisaAccount:
     ):
 
         self.annual_deposit_limit = decimal.Decimal("3.6") * constants.MILLION
-        self.total_deposit_limit = decimal.Decimal("18") * constants.MILLION
+        self.total_deposit_limit = decimal.Decimal(18) * constants.MILLION
 
         if principal > self.total_deposit_limit:
             raise ValueError(f"Principal {principal} exceeds total deposit limit of {self.total_deposit_limit}")
@@ -310,8 +309,44 @@ class InvestmentPolicy(pydantic.BaseModel):
     ideco: IdecoPolicy
 
 
-@beartype.beartype
-class InvestmentManager:
+class InvestmentManager(typing.Protocol):
+
+    simulation_start_year: int
+
+    @property
+    def portfolio_value(self) -> decimal.Decimal:
+        ...
+
+    @property
+    def after_tax_portfolio_value(self) -> decimal.Decimal:
+        ...
+
+    def advance_one_year(self, year: int):
+        ...
+
+    def deposit(self, amount: decimal.Decimal, age: int):
+        ...
+
+    def withdraw(self, desired_cash: decimal.Decimal):
+        ...
+
+    def optimize_investments(self, age: int):
+        ...
+
+    def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
+        ...
+
+    def get_formatted_portfolio_summary_description(self) -> str:
+        ...
+
+
+class SimpleInvestmentManager:
+    """
+    Investment manager with a strategy that:
+    - prioritizes depositing into NISA before ordinary account
+    - prioritizes withdrawing fron ordinary account before NISA
+    - withdraws half iDeCO funds at pension start time,
+    """
 
     def __init__(
         self,
@@ -320,29 +355,31 @@ class InvestmentManager:
         old_nisa_account: OldNisaAccount,
         nisa_account: NisaAccount,
         investment_policy: InvestmentPolicy,
-        start_age: int,
-        start_year: int
+        simulation_start_age: int,
+        simulation_start_year: int
     ):
-        """
-        Constructor
-
-        Args:
-            start_age (int): age of the person for whom investments are managed at simulation start.
-            start_year (int): year at which simulation started.
-        """
 
         self.ordinary_investment_account = ordinary_investment_account
         self.ideco_investment_account = ideco_investment_account
         self.old_nisa_account = old_nisa_account
         self.nisa_account = nisa_account
         self.investment_policy = investment_policy
-        self.start_age = start_age
-        self.start_year = start_year
+        self.simulation_start_age = simulation_start_age
+        self.simulation_start_year = simulation_start_year
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
         return \
             self.ordinary_investment_account.portfolio_value + \
+            self.ideco_investment_account.portfolio_value + \
+            self.old_nisa_account.portfolio_value + \
+            self.nisa_account.portfolio_value
+
+    @property
+    def after_tax_portfolio_value(self) -> decimal.Decimal:
+
+        return \
+            self.ordinary_investment_account.max_cash_withdrawal + \
             self.ideco_investment_account.portfolio_value + \
             self.old_nisa_account.portfolio_value + \
             self.nisa_account.portfolio_value
@@ -373,7 +410,7 @@ class InvestmentManager:
 
         if self.nisa_account.principal < self.nisa_account.total_deposit_limit:
 
-            current_year = self.start_year + age - self.start_age
+            current_year = self.simulation_start_year + age - self.simulation_start_age
 
             amount_deposited_to_nisa = min(
                 self.nisa_account.total_deposit_limit - self.nisa_account.principal,
@@ -393,14 +430,14 @@ class InvestmentManager:
             LOGGER.debug(
                 f"Deposited {utilities.format_million_yen(amount)} to ordinary investment account")
 
-    def withdraw(self, desired_cash: decimal.Decimal) -> decimal.Decimal:
+    def withdraw(self, desired_cash: decimal.Decimal):
 
         desired_cash = desired_cash.quantize(constants.YEN, decimal.ROUND_UP)
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
 
-        total_cash_withdrawn = decimal.Decimal("0")
+        total_cash_withdrawn = decimal.Decimal(0)
 
         # Establish how much to withdraw from ordinary account
         withdrawal_from_ordinary_account = min(
@@ -438,17 +475,15 @@ class InvestmentManager:
 
             raise ValueError(f"Not enough funds to withdraw {desired_cash}")
 
-        return total_cash_withdrawn
-
     def optimize_investments(self, age: int):
         """
         Optimize investments based on the investment policy.
         """
 
-        current_year = self.start_year + (age - self.start_age)
+        current_year = self.simulation_start_year + (age - self.simulation_start_age)
 
         # Check if any old nisa account portfolio has to be liquidated
-        if (current_year - 20) in self.old_nisa_account.year_to_portfolio_map.keys():
+        if (current_year - 20) in self.old_nisa_account.year_to_portfolio_map:
 
             portfolio_value = self.old_nisa_account.year_to_portfolio_map.pop(current_year - 20)
             self.ordinary_investment_account.deposit(portfolio_value)
@@ -477,7 +512,7 @@ class InvestmentManager:
             )
 
             self.ordinary_investment_account.withdraw(nisa_deposit)
-            self.nisa_account.deposit(nisa_deposit, self.start_year + age - self.start_year)
+            self.nisa_account.deposit(nisa_deposit, self.simulation_start_year + age - self.simulation_start_year)
 
             LOGGER.debug(
                 f"Moved {utilities.format_million_yen(nisa_deposit)} "

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "yenwealth"
-version = "0.1.0"
+version = "0.2.0"
 description = "Financial planning tools for individuals living in Japan"
 readme = "README.md"
 license = "MIT"
@@ -17,6 +17,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pycodestyle",
     "pytest",
+    "pyright",
+    "ruff"
 ]
+
+[tool.ruff]
+line-length = 120

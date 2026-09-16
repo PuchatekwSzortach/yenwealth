@@ -5,7 +5,7 @@ Module with utilities
 import decimal
 
 
-def format_million_yen(value: float | int | decimal.Decimal) -> str:
+def format_million_yen(value: float | decimal.Decimal) -> str:
     """
     Format a value in million yen
     """
