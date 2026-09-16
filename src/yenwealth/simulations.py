@@ -7,9 +7,7 @@ import decimal
 import logging
 import typing
 
-from . import constants
-from . import investments
-
+from . import constants, investments
 
 LOGGER = logging.getLogger(__name__)
 
@@ -25,28 +23,26 @@ class EarnedAnnualIncome(typing.Protocol):
 
 
 @dataclasses.dataclass
-class LifeFinancesSimulatorInputs:
+class FinancesSimulatorInputs:
 
-    annual_costs_of_living_callable: AnnualCostsOfLiving
+    annual_costs_callable: AnnualCostsOfLiving
     earned_annual_income_callable: EarnedAnnualIncome
     investment_manager: investments.InvestmentManager
     simulation_start_age: int
     simulation_end_age: int
 
 
-class LifeFinancesSimulator:
+class FinancesSimulator:
 
-    def __init__(self, inputs: LifeFinancesSimulatorInputs):
+    def __init__(self, inputs: FinancesSimulatorInputs):
 
         self.inputs = inputs
         self.investment_manager = self.inputs.investment_manager
 
     def run_simulation(self) -> dict:
 
-        LOGGER.info("Starting life finances simulation")
-
         current_age = self.inputs.simulation_start_age
-        current_year = self.investment_manager.start_year
+        current_year = self.investment_manager.simulation_start_year
 
         investment_simulation = {
             "age": [],
@@ -59,8 +55,6 @@ class LifeFinancesSimulator:
 
             portfolio_summary = self.investment_manager.get_formatted_portfolio_summary_description()
             LOGGER.debug(f"Portfolio value at simulation start:\n{portfolio_summary}")
-
-        LOGGER.info(f"Starting simulation at age {current_age}, year {current_year}")
 
         try:
 
@@ -77,11 +71,11 @@ class LifeFinancesSimulator:
                     LOGGER.debug(f"Portfolio value at age {current_age} - at year start:\n{portfolio_summary}")
 
                 earned_income = self.inputs.earned_annual_income_callable(current_age)
-                costs_of_living = self.inputs.annual_costs_of_living_callable(current_age)
+                costs_of_living = self.inputs.annual_costs_callable(current_age)
 
                 withdrawal = max(
                     costs_of_living - earned_income,
-                    decimal.Decimal("0")
+                    decimal.Decimal(0)
                 )
 
                 if withdrawal > 0:
@@ -97,7 +91,7 @@ class LifeFinancesSimulator:
                 # we can keep on investing
                 surplus_funds = max(
                     earned_income - costs_of_living,
-                    decimal.Decimal("0")
+                    decimal.Decimal(0)
                 )
 
                 if surplus_funds > 0:

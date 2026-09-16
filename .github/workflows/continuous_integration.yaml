@@ -13,7 +13,5 @@ jobs:
       - name: install dependencies
         run: |
           pip install -e ".[dev]"
-      - name: run tests
-        run: pytest ./tests
-      - name: run static code analysis
-        run: pycodestyle ./src ./tests
+      - name: run checks
+        run: bash ./run_checks.sh
