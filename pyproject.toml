@@ -17,8 +17,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pycodestyle",
     "pytest",
+    "pyright",
+    "ruff"
 ]
 
 [tool.ruff]
