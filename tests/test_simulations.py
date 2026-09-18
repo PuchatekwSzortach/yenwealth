@@ -40,7 +40,7 @@ class FakeInvestmentManager:
         self.calls.append(("advance_one_year", year))
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
-            ...
+        ...
 
 
 def make_inputs(

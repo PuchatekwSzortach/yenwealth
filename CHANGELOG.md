@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.3.0
+- updated - OrdinaryInvestmentAccount's capital_gain_tax_rate now has a default value
+- improved - IdecoInvestmentAccount now correctly calculates max allowed tax free lump withdrawal amount based on when contributions to the account began
+
 ### 0.2.0
 - renamed InvestmentManager to SimpleInvestmentManager, added InvestmentManager as a protocol
 - added FinancesSimulator class

@@ -170,7 +170,6 @@ class IdecoInvestmentAccount:
             (decimal.Decimal(400_000) * min(years_since_account_started, 20)) + \
             (decimal.Decimal(700_000) * max(years_since_account_started - 20, 0))
 
-
     def withdraw_tax_free_lump_sum(self, year: int) -> decimal.Decimal:
 
         if year < self.contribution_start_year:
