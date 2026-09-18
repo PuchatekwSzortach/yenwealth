@@ -25,7 +25,7 @@ class OrdinaryInvestmentAccount:
         principal: decimal.Decimal,
         gain: decimal.Decimal,
         investment_return_rate: decimal.Decimal,
-        capital_gain_tax_rate: decimal.Decimal
+        capital_gain_tax_rate: decimal.Decimal = decimal.Decimal("0.20325")
     ):
 
         self.investment_return_rate = investment_return_rate
@@ -52,11 +52,6 @@ class OrdinaryInvestmentAccount:
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
-
-        if desired_cash > self.portfolio_value:
-            raise ValueError(
-                f"Withdrawal value {desired_cash} exceeds portfolio value {self.portfolio_value}"
-            )
 
         gain_ratio = self.gain / self.portfolio_value
 
@@ -87,17 +82,20 @@ class OrdinaryInvestmentAccount:
 @beartype.beartype
 class IdecoInvestmentAccount:
 
-    def __init__(self, portfolio_value: decimal.Decimal, investment_return_rate: decimal.Decimal):
+    def __init__(
+            self,
+            portfolio_value: decimal.Decimal,
+            investment_return_rate: decimal.Decimal,
+            contribution_start_year: int):
 
         self.investment_return_rate = investment_return_rate
         self.portfolio_value = portfolio_value
+        self.contribution_start_year = contribution_start_year
 
         self.max_annual_contribution = decimal.Decimal("0.276") * constants.MILLION
         self.max_deposit_age = 65
         self.minimum_withdrawal_start_age = 60
         self.maximum_withdrawal_start_age = 75
-
-        self.max_tax_free_lump_sum = decimal.Decimal("17.8") * constants.MILLION
 
         self.has_started_drawing_pension = False
         self.maybe_pension_period_in_years: returns.maybe.Maybe[int] = returns.maybe.Nothing
@@ -121,12 +119,6 @@ class IdecoInvestmentAccount:
     def advance_one_year(self):
 
         self.portfolio_value = self.portfolio_value * (1 + self.investment_return_rate)
-
-    def withdraw_tax_free_lump_sum(self) -> decimal.Decimal:
-
-        amount_withdrawn = min(self.portfolio_value, self.max_tax_free_lump_sum)
-        self.portfolio_value -= amount_withdrawn
-        return amount_withdrawn
 
     def start_pension_scheme(self, start_age: int, period_in_years: int):
 
@@ -165,6 +157,27 @@ class IdecoInvestmentAccount:
         self.pension_payout_ages.append(age)
 
         return withdrawal
+
+    def get_max_allowed_tax_free_lump_withdrawal_amount(self, year: int) -> decimal.Decimal:
+
+        if year < self.contribution_start_year:
+            raise ValueError(f"Year {year} has to be larger than account start year {self.contribution_start_year}")
+
+        years_since_account_started = year - self.contribution_start_year
+
+        # Max tax free lump sum depends on how long ago ideco account was established
+        return \
+            (decimal.Decimal(400_000) * min(years_since_account_started, 20)) + \
+            (decimal.Decimal(700_000) * max(years_since_account_started - 20, 0))
+
+    def withdraw_tax_free_lump_sum(self, year: int) -> decimal.Decimal:
+
+        if year < self.contribution_start_year:
+            raise ValueError(f"Year {year} has to be larger than account start year {self.contribution_start_year}")
+
+        amount_withdrawn = min(self.portfolio_value, self.get_max_allowed_tax_free_lump_withdrawal_amount(year))
+        self.portfolio_value -= amount_withdrawn
+        return amount_withdrawn
 
 
 @beartype.beartype
@@ -496,7 +509,9 @@ class SimpleInvestmentManager:
         # Check if we should do lump withdrawal from iDeCo
         if age == self.investment_policy.ideco.withdrawal_start_age:
 
-            tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum()
+            year = self.simulation_start_year + age - self.simulation_start_age
+
+            tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(year)
             self.ordinary_investment_account.deposit(tax_free_lump_sum)
 
             LOGGER.debug(
