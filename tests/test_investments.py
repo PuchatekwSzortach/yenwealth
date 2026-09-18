@@ -160,7 +160,8 @@ class TestIdecoInvestmentAccount:
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             portfolio_value=decimal.Decimal(100),
-            investment_return_rate=decimal.Decimal(0)
+            investment_return_rate=decimal.Decimal(0),
+            contribution_start_year=2020
         )
 
         with pytest.raises(ValueError):
@@ -172,7 +173,8 @@ class TestIdecoInvestmentAccount:
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             portfolio_value=decimal.Decimal(100),
-            investment_return_rate=decimal.Decimal(0)
+            investment_return_rate=decimal.Decimal(0),
+            contribution_start_year=2020
         )
 
         ideco.start_pension_scheme(
@@ -206,6 +208,22 @@ class TestIdecoInvestmentAccount:
         assert abs(amount - portfolio_value_before_withdrawal) < decimal.Decimal("0.001")
 
         assert ideco.portfolio_value == decimal.Decimal(0)
+
+    def test_max_allowed_lump_free_withdrawal(self):
+
+        ideco = yenwealth.investments.IdecoInvestmentAccount(
+            portfolio_value=decimal.Decimal(100),
+            investment_return_rate=decimal.Decimal(0),
+            contribution_start_year=2020
+        )
+
+        # Before 20 year threshold
+        assert decimal.Decimal(800_000) == ideco.get_max_allowed_tax_free_lump_withdrawal_amount(2022)
+        assert decimal.Decimal(4_000_000) == ideco.get_max_allowed_tax_free_lump_withdrawal_amount(2030)
+
+        # After 20 year threshold
+        assert decimal.Decimal(8_700_000) == ideco.get_max_allowed_tax_free_lump_withdrawal_amount(2041)
+        assert decimal.Decimal(15_000_000) == ideco.get_max_allowed_tax_free_lump_withdrawal_amount(2050)
 
 
 class TestOldNisaAccount:
@@ -431,7 +449,8 @@ class TestInvestmentManager:
         # 2. iDeCo Account: 0 initial portfolio
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             portfolio_value=decimal.Decimal(0),
-            investment_return_rate=decimal.Decimal("0.05")
+            investment_return_rate=decimal.Decimal("0.05"),
+            contribution_start_year=2020
         )
 
         # 3. Old NISA Account: empty year map
