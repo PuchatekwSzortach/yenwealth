@@ -10,7 +10,10 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.14"
 dependencies = [
+    "arch",
     "beartype",
+    "numpy",
+    "pandas",
     "pydantic",
     "returns"
 ]

@@ -4,6 +4,9 @@ Tests for simulations module
 
 import decimal
 
+import pandas
+import pytest
+
 import yenwealth.investments
 import yenwealth.simulations
 
@@ -305,3 +308,76 @@ def test_advance_one_year_receives_correct_year():
         ("advance_one_year", 2031),
         ("advance_one_year", 2032),
     ]
+
+
+@pytest.fixture
+def sample_index():
+    return pandas.date_range(start="2010-01-01", periods=10, freq="YE")
+
+
+@pytest.fixture
+def sample_returns(sample_index):
+    return pandas.DataFrame(
+        {"Asset_A": range(1, 11), "Asset_B": range(11, 21)},
+        index=sample_index,
+    )
+
+
+@pytest.fixture
+def sample_inflation(sample_index):
+    return pandas.DataFrame(
+        {"Inflation": [0.02] * 10},
+        index=sample_index,
+    )
+
+
+@pytest.fixture
+def sample_economic_data(sample_returns, sample_inflation):
+    return yenwealth.simulations.EconomicData(
+        return_on_assets_over_time=sample_returns,
+        inflation_over_time=sample_inflation,
+    )
+
+
+class TestEconomicData:
+
+    def test_init_raises_value_error_on_mismatched_index(self, sample_returns, sample_inflation):
+
+        mismatched_inflation = sample_inflation.copy()
+        mismatched_inflation.index = pandas.date_range(start="2011-01-01", periods=10, freq="YE")
+
+        with pytest.raises(ValueError, match="EconomicData inputs must share the same index"):
+            yenwealth.simulations.EconomicData(
+                return_on_assets_over_time=sample_returns,
+                inflation_over_time=mismatched_inflation,
+            )
+
+
+class TestEconomicDataSimulator:
+
+    def test_generate_simulation_dimensions_and_index(self, sample_economic_data):
+
+        simulator = yenwealth.simulations.EconomicDataSimulator(sample_economic_data)
+        start_year = 2025
+        period = 15
+        block_size = 2
+
+        simulated_data = simulator.generate_simulation(
+            start=start_year, period=period, block_size=block_size
+        )
+
+        # Verify output is instance of EconomicData
+        assert isinstance(simulated_data, yenwealth.simulations.EconomicData)
+
+        # Verify row length matches requested period
+        assert len(simulated_data.return_on_assets_over_time) == period
+        assert len(simulated_data.inflation_over_time) == period
+
+        # Verify new index starts at `start` and runs sequentially
+        expected_index = pandas.RangeIndex(start=start_year, stop=start_year + period)
+        pandas.testing.assert_index_equal(simulated_data.return_on_assets_over_time.index, expected_index)
+        pandas.testing.assert_index_equal(simulated_data.inflation_over_time.index, expected_index)
+
+        # Verify column integrity
+        assert list(simulated_data.return_on_assets_over_time.columns) == ["Asset_A", "Asset_B"]
+        assert list(simulated_data.inflation_over_time.columns) == ["Inflation"]

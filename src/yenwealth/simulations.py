@@ -5,7 +5,12 @@ Module with simulation logic
 import dataclasses
 import decimal
 import logging
+import math
 import typing
+
+import arch.bootstrap
+import numpy
+import pandas
 
 from . import constants, investments
 
@@ -20,6 +25,61 @@ class AnnualCostsOfLiving(typing.Protocol):
 class EarnedAnnualIncome(typing.Protocol):
     def __call__(self, age: int) -> decimal.Decimal:
         ...
+
+
+class EconomicData:
+
+    def __init__(self, return_on_assets_over_time: pandas.DataFrame, inflation_over_time: pandas.DataFrame):
+        """
+        Class that bundles annual return on securities over time and inflation over time
+
+        Args:
+            return_on_assets_over_time (pandas.DataFrame): dataframe with return over time on assets.
+            Column names correspend to securities.
+            inflation_over_time (pandas.DataFrame): dataframe with inflation over time.
+
+        Raises:
+            ValueError: raised if inputs don't share the index
+        """
+
+        if not return_on_assets_over_time.index.equals(inflation_over_time.index):
+
+            raise ValueError("EconomicData inputs must share the same index")
+
+        self.return_on_assets_over_time = return_on_assets_over_time
+        self.inflation_over_time = inflation_over_time
+
+
+class EconomicDataSimulator:
+
+    def __init__(self, historical_economic_data: EconomicData):
+
+        self.historical_economic_data = historical_economic_data
+
+    def generate_simulation(self, start: int, period: int, block_size: int) -> EconomicData:
+
+        economic_data_index = self.historical_economic_data.inflation_over_time.index.to_numpy()
+
+        bootstrap = arch.bootstrap.StationaryBootstrap(block_size, economic_data_index)
+
+        draws_needed = math.ceil(period / len(economic_data_index))
+
+        arch_draws = [typing.cast(pandas.DataFrame, draw[0][0]) for draw in bootstrap.bootstrap(draws_needed)]
+
+        full_simulation_index = numpy.concat(arch_draws, axis=0)[:period]
+
+        return_on_assets_over_time = \
+            self.historical_economic_data.return_on_assets_over_time.loc[full_simulation_index]
+
+        return_on_assets_over_time.index = range(start, start + period)
+
+        inflation_over_time = self.historical_economic_data.inflation_over_time.loc[full_simulation_index]
+        inflation_over_time.index = range(start, start + period)
+
+        return EconomicData(
+            return_on_assets_over_time=return_on_assets_over_time,
+            inflation_over_time=inflation_over_time
+        )
 
 
 @dataclasses.dataclass
