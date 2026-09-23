@@ -18,6 +18,54 @@ LOGGER = logging.getLogger(__name__)
 
 
 @beartype.beartype
+class Asset:
+
+    def __init__(
+            self, name: str,
+            principal: decimal.Decimal,
+            gain: decimal.Decimal,
+            annual_management_cost_rate: decimal.Decimal):
+
+        self.name = name
+        self.principal = principal
+        self.gain = gain
+        self.annual_management_cost_rate = annual_management_cost_rate
+
+    @property
+    def value(self) -> decimal.Decimal:
+        return self.principal + self.gain
+
+    def advance_one_year(self, change_rate: decimal.Decimal):
+
+        self.gain += self.value * (change_rate - self.annual_management_cost_rate)
+
+    def sell(self, amount: decimal.Decimal):
+
+        if amount < 0:
+            raise ValueError(f"amount value should be non-negative, got {amount}")
+
+        if amount > self.value:
+            raise ValueError(
+                f"amount value {amount} exceeds current value {self.value}"
+            )
+
+        gain_ratio = self.gain / self.value
+
+        withdrawal_from_gain = gain_ratio * amount
+        withdrawal_from_principal = amount - withdrawal_from_gain
+
+        self.principal -= withdrawal_from_principal
+        self.gain -= withdrawal_from_gain
+
+    def buy(self, amount: decimal.Decimal):
+
+        if amount <= 0:
+            raise ValueError(f"amount value should be non-negative, got {amount}")
+
+        self.principal += amount
+
+
+@beartype.beartype
 class OrdinaryInvestmentAccount:
 
     def __init__(

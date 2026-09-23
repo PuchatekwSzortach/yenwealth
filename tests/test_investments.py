@@ -7,6 +7,58 @@ import yenwealth.constants
 import yenwealth.investments
 
 
+class TestAsset:
+
+    def test_sell(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(60),
+            annual_management_cost_rate=decimal.Decimal(0)
+        )
+
+        asset.sell(decimal.Decimal(50))
+
+        assert asset.principal == decimal.Decimal("68.75")
+        assert asset.gain == decimal.Decimal("41.25")
+        assert asset.value == decimal.Decimal(110)
+
+    def test_advance_one_year(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(60),
+            annual_management_cost_rate=decimal.Decimal("0.1")
+        )
+
+        assert asset.value == decimal.Decimal(160)
+
+        asset.advance_one_year(change_rate=decimal.Decimal("0.15"))
+
+        assert asset.value == decimal.Decimal(168)
+        assert asset.principal == decimal.Decimal(100)
+        assert asset.gain == decimal.Decimal(68)
+
+    def test_buy(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(60),
+            annual_management_cost_rate=decimal.Decimal("0.1")
+        )
+
+        assert asset.value == decimal.Decimal(160)
+
+        asset.buy(decimal.Decimal(20))
+
+        assert asset.principal == decimal.Decimal(120)
+        assert asset.gain == decimal.Decimal(60)
+        assert asset.value == decimal.Decimal(180)
+
+
 class TestOrdinaryInvestmentAccount:
     """
     Test for OrdinaryInvestmentAccount
