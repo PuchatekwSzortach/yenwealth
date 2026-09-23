@@ -23,13 +23,15 @@ class FakeInvestmentManager:
         self.after_tax_portfolio_value = after_tax_portfolio_value
         self.simulation_start_year = simulation_start_year
 
+        self.current_year = simulation_start_year
+
         self.calls = []
 
     def get_formatted_portfolio_summary_description(self) -> str:
         return "fake portfolio"
 
-    def optimize_investments(self, age: int):
-        self.calls.append(("optimize_investments", age))
+    def optimize_investments(self):
+        self.calls.append(("optimize_investments", self.current_year))
 
     def withdraw(self, desired_cash: decimal.Decimal):
         self.calls.append(("withdraw", desired_cash))
@@ -39,8 +41,9 @@ class FakeInvestmentManager:
         self.calls.append(("deposit", amount, age))
         self.portfolio_value += amount
 
-    def advance_one_year(self, year: int):
-        self.calls.append(("advance_one_year", year))
+    def advance_one_year(self):
+        self.current_year += 1
+        self.calls.append(("advance_one_year", self.current_year))
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
         ...
@@ -274,39 +277,9 @@ def test_investment_manager_operations_are_called_in_correct_order():
     simulator.run_simulation()
 
     assert investment_manager.calls == [
-        ("optimize_investments", 50),
+        ("optimize_investments", 2026),
         ("withdraw", decimal.Decimal(20)),
-        ("advance_one_year", 2026),
-    ]
-
-
-def test_advance_one_year_receives_correct_year():
-
-    investment_manager = FakeInvestmentManager(
-        portfolio_value=decimal.Decimal(100),
-        after_tax_portfolio_value=decimal.Decimal(100),
-        simulation_start_year=2030)
-
-    simulator = yenwealth.simulations.FinancesSimulator(
-        make_inputs(
-            investment_manager,
-            start_age=50,
-            end_age=52,
-            costs=decimal.Decimal(0),
-            income=decimal.Decimal(0),
-        )
-    )
-
-    simulator.run_simulation()
-
-    assert [
-        call
-        for call in investment_manager.calls
-        if call[0] == "advance_one_year"
-    ] == [
-        ("advance_one_year", 2030),
-        ("advance_one_year", 2031),
-        ("advance_one_year", 2032),
+        ("advance_one_year", 2027),
     ]
 
 

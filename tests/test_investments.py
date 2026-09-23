@@ -566,8 +566,9 @@ class TestInvestmentManager:
         # Current year = start_year (2024) + age (50) - start_age (30) = 2044
         # 20 years prior = 2024. Populate Old NISA portfolio for 2024
         investment_manager.old_nisa_account.year_to_portfolio_map = {2024: decimal.Decimal(1_000_000)}
+        investment_manager.current_year = 2044
 
-        investment_manager.optimize_investments(age=50)
+        investment_manager.optimize_investments()
 
         # 2024 Old NISA portfolio should be removed and moved into NISA Account
         assert 2024 not in investment_manager.old_nisa_account.year_to_portfolio_map
@@ -577,8 +578,10 @@ class TestInvestmentManager:
 
         investment_manager.ideco_investment_account.portfolio_value = decimal.Decimal(10_000_000)
 
-        # Set age to policy withdrawal_start_age (75)
-        investment_manager.optimize_investments(age=75)
+        # Year at which we hit age of 75, and ideco policy was set to do lump withdrawal at that age
+        investment_manager.current_year = 2069
+
+        investment_manager.optimize_investments()
 
         # 1. iDeCo 10M transferred to Ordinary Account tax-free
         # 2. Ordinary Account then transfers 3.6M (annual limit) to NISA Account

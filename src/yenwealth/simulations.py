@@ -123,7 +123,7 @@ class FinancesSimulator:
 
                 LOGGER.info(f"Simulating year {current_year} at age {current_age}")
 
-                self.investment_manager.optimize_investments(age=current_age)
+                self.investment_manager.optimize_investments()
 
                 if LOGGER.isEnabledFor(logging.DEBUG):
 
@@ -172,7 +172,7 @@ class FinancesSimulator:
                     LOGGER.debug(
                         f"Portfolio value at age {current_age} - after withdrawals and deposits:\n{portfolio_summary}")
 
-                self.investment_manager.advance_one_year(year=current_year)
+                self.investment_manager.advance_one_year()
 
                 investment_simulation["portfolio_value"].append(self.investment_manager.portfolio_value)
                 investment_simulation["after_tax_portfolio_value"].append(
