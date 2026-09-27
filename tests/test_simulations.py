@@ -4,6 +4,7 @@ Tests for simulations module
 
 import decimal
 
+import numpy
 import pandas
 import pytest
 
@@ -112,7 +113,7 @@ def test_simulation_runs_until_end_age():
 
     result = simulator.run_simulation()
 
-    assert result["age"] == [50, 51, 52]
+    assert result["age"].tolist() == [50, 51, 52]
 
 
 def test_simulation_stops_when_portfolio_is_depleted():
@@ -138,7 +139,11 @@ def test_simulation_stops_when_portfolio_is_depleted():
     # Initial state + ages 50 and 51.
     # After withdrawing 60 at age 50, 40 remains.
     # After withdrawing 60 at age 51, the portfolio reaches -20.
-    assert result["age"] == [50, 51]
+    numpy.testing.assert_allclose(
+        result["age"].tolist(),
+        [50, 51, numpy.nan, numpy.nan, numpy.nan, numpy.nan],
+        equal_nan=True
+    )
 
 
 def test_surplus_income_is_deposited():
@@ -155,7 +160,7 @@ def test_surplus_income_is_deposited():
             costs=decimal.Decimal(80),
             income=decimal.Decimal(100),
             start_age=50,
-            end_age=50,
+            end_age=51,
         )
     )
 

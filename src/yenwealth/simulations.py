@@ -91,6 +91,11 @@ class FinancesSimulatorInputs:
     simulation_start_age: int
     simulation_end_age: int
 
+    def __post_init__(self):
+
+        if self.simulation_end_age < self.simulation_start_age:
+            raise ValueError("simulation_end_age can't be smaller than simulation_start_age")
+
 
 class FinancesSimulator:
 
@@ -99,16 +104,18 @@ class FinancesSimulator:
         self.inputs = inputs
         self.investment_manager = self.inputs.investment_manager
 
-    def run_simulation(self) -> dict:
+    def run_simulation(self) -> pandas.DataFrame:
 
         current_age = self.inputs.simulation_start_age
         current_year = self.investment_manager.simulation_start_year
 
+        simulation_step_count = self.inputs.simulation_end_age - self.inputs.simulation_start_age + 1
+
         investment_simulation = {
-            "age": [],
-            "portfolio_value": [],
-            "after_tax_portfolio_value": [],
-            "cost_of_living": []
+            "age": numpy.full(simulation_step_count, numpy.nan),
+            "portfolio_value": numpy.full(simulation_step_count, numpy.nan),
+            "after_tax_portfolio_value": numpy.full(simulation_step_count, numpy.nan),
+            "cost_of_living": numpy.full(simulation_step_count, numpy.nan)
         }
 
         if LOGGER.isEnabledFor(logging.INFO):
@@ -174,18 +181,20 @@ class FinancesSimulator:
 
                 self.investment_manager.advance_one_year()
 
-                investment_simulation["portfolio_value"].append(self.investment_manager.portfolio_value)
-                investment_simulation["after_tax_portfolio_value"].append(
-                    self.investment_manager.after_tax_portfolio_value)
-                investment_simulation["age"].append(current_age)
-                investment_simulation["cost_of_living"].append(costs_of_living)
+                simulation_index = current_age - self.inputs.simulation_start_age
+
+                investment_simulation["portfolio_value"][simulation_index] = self.investment_manager.portfolio_value
+                investment_simulation["after_tax_portfolio_value"][simulation_index] = \
+                    self.investment_manager.after_tax_portfolio_value
+                investment_simulation["age"][simulation_index] = current_age
+                investment_simulation["cost_of_living"][simulation_index] = costs_of_living
 
                 current_age += 1
                 current_year += 1
 
-        finally:
+        except investments.InsufficientFunds as error:
 
-            LOGGER.info("Investment simulation")
-            LOGGER.info(investment_simulation)
+            LOGGER.error(error)
+            return pandas.DataFrame(investment_simulation)
 
-        return investment_simulation
+        return pandas.DataFrame(investment_simulation)

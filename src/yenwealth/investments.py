@@ -17,6 +17,11 @@ from . import constants, utilities
 LOGGER = logging.getLogger(__name__)
 
 
+class InsufficientFunds(Exception):
+
+    pass
+
+
 @beartype.beartype
 class Asset:
 
@@ -540,7 +545,7 @@ class SimpleInvestmentManager:
 
         if total_cash_withdrawn < desired_cash:
 
-            raise ValueError(f"Not enough funds to withdraw {desired_cash}")
+            raise InsufficientFunds(f"Not enough funds to withdraw {desired_cash}")
 
     def optimize_investments(self):
         """
