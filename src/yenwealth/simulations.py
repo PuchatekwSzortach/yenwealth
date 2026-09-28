@@ -12,51 +12,18 @@ import arch.bootstrap
 import numpy
 import pandas
 
-from . import constants, investments
+from . import constants, core, investments
 
 LOGGER = logging.getLogger(__name__)
 
 
-class AnnualCostsOfLiving(typing.Protocol):
-    def __call__(self, age: int) -> decimal.Decimal:
-        ...
-
-
-class EarnedAnnualIncome(typing.Protocol):
-    def __call__(self, age: int) -> decimal.Decimal:
-        ...
-
-
-class EconomicData:
-
-    def __init__(self, return_on_assets_over_time: pandas.DataFrame, inflation_over_time: pandas.DataFrame):
-        """
-        Class that bundles annual return on securities over time and inflation over time
-
-        Args:
-            return_on_assets_over_time (pandas.DataFrame): dataframe with return over time on assets.
-            Column names correspend to securities.
-            inflation_over_time (pandas.DataFrame): dataframe with inflation over time.
-
-        Raises:
-            ValueError: raised if inputs don't share the index
-        """
-
-        if not return_on_assets_over_time.index.equals(inflation_over_time.index):
-
-            raise ValueError("EconomicData inputs must share the same index")
-
-        self.return_on_assets_over_time = return_on_assets_over_time
-        self.inflation_over_time = inflation_over_time
-
-
 class EconomicDataSimulator:
 
-    def __init__(self, historical_economic_data: EconomicData):
+    def __init__(self, historical_economic_data: core.EconomicData):
 
         self.historical_economic_data = historical_economic_data
 
-    def generate_simulation(self, start: int, period: int, block_size: int) -> EconomicData:
+    def generate_simulation(self, start: int, period: int, block_size: int) -> core.EconomicData:
 
         economic_data_index = self.historical_economic_data.inflation_over_time.index.to_numpy()
 
@@ -76,7 +43,7 @@ class EconomicDataSimulator:
         inflation_over_time = self.historical_economic_data.inflation_over_time.loc[full_simulation_index]
         inflation_over_time.index = range(start, start + period)
 
-        return EconomicData(
+        return core.EconomicData(
             return_on_assets_over_time=return_on_assets_over_time,
             inflation_over_time=inflation_over_time
         )
@@ -85,9 +52,10 @@ class EconomicDataSimulator:
 @dataclasses.dataclass
 class FinancesSimulatorInputs:
 
-    annual_costs_callable: AnnualCostsOfLiving
-    earned_annual_income_callable: EarnedAnnualIncome
+    annual_costs_callable: core.AnnualCostsOfLiving
+    earned_annual_income_callable: core.EarnedAnnualIncome
     investment_manager: investments.InvestmentManager
+    simulated_economic_data: core.EconomicData
     simulation_start_age: int
     simulation_end_age: int
 

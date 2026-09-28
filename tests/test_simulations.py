@@ -6,8 +6,8 @@ import decimal
 
 import numpy
 import pandas
-import pytest
 
+import yenwealth.core
 import yenwealth.investments
 import yenwealth.simulations
 
@@ -58,10 +58,19 @@ def make_inputs(
     costs: decimal.Decimal,
     income: decimal.Decimal,
 ):
+
+    simulation_steps = end_age - start_age + 1
+
+    simulated_economic_data = yenwealth.core.EconomicData(
+        return_on_assets_over_time=pandas.DataFrame({"S&P500": [0.1] * simulation_steps}),
+        inflation_over_time=pandas.DataFrame({"inflation_rate": [0.03] * simulation_steps})
+    )
+
     return yenwealth.simulations.FinancesSimulatorInputs(
         annual_costs_callable=lambda age: costs,
         earned_annual_income_callable=lambda age: income,
         investment_manager=investment_manager,
+        simulated_economic_data=simulated_economic_data,
         simulation_start_age=start_age,
         simulation_end_age=end_age
     )
@@ -288,54 +297,12 @@ def test_investment_manager_operations_are_called_in_correct_order():
     ]
 
 
-@pytest.fixture
-def sample_index():
-    return pandas.date_range(start="2010-01-01", periods=10, freq="YE")
-
-
-@pytest.fixture
-def sample_returns(sample_index):
-    return pandas.DataFrame(
-        {"Asset_A": range(1, 11), "Asset_B": range(11, 21)},
-        index=sample_index,
-    )
-
-
-@pytest.fixture
-def sample_inflation(sample_index):
-    return pandas.DataFrame(
-        {"Inflation": [0.02] * 10},
-        index=sample_index,
-    )
-
-
-@pytest.fixture
-def sample_economic_data(sample_returns, sample_inflation):
-    return yenwealth.simulations.EconomicData(
-        return_on_assets_over_time=sample_returns,
-        inflation_over_time=sample_inflation,
-    )
-
-
-class TestEconomicData:
-
-    def test_init_raises_value_error_on_mismatched_index(self, sample_returns, sample_inflation):
-
-        mismatched_inflation = sample_inflation.copy()
-        mismatched_inflation.index = pandas.date_range(start="2011-01-01", periods=10, freq="YE")
-
-        with pytest.raises(ValueError, match="EconomicData inputs must share the same index"):
-            yenwealth.simulations.EconomicData(
-                return_on_assets_over_time=sample_returns,
-                inflation_over_time=mismatched_inflation,
-            )
-
-
 class TestEconomicDataSimulator:
 
     def test_generate_simulation_dimensions_and_index(self, sample_economic_data):
 
         simulator = yenwealth.simulations.EconomicDataSimulator(sample_economic_data)
+
         start_year = 2025
         period = 15
         block_size = 2
@@ -345,7 +312,7 @@ class TestEconomicDataSimulator:
         )
 
         # Verify output is instance of EconomicData
-        assert isinstance(simulated_data, yenwealth.simulations.EconomicData)
+        assert isinstance(simulated_data, yenwealth.core.EconomicData)
 
         # Verify row length matches requested period
         assert len(simulated_data.return_on_assets_over_time) == period
