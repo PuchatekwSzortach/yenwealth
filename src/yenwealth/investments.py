@@ -17,6 +17,59 @@ from . import constants, utilities
 LOGGER = logging.getLogger(__name__)
 
 
+class InsufficientFunds(Exception):
+
+    pass
+
+
+@beartype.beartype
+class Asset:
+
+    def __init__(
+            self, name: str,
+            principal: decimal.Decimal,
+            gain: decimal.Decimal,
+            annual_management_cost_rate: decimal.Decimal):
+
+        self.name = name
+        self.principal = principal
+        self.gain = gain
+        self.annual_management_cost_rate = annual_management_cost_rate
+
+    @property
+    def value(self) -> decimal.Decimal:
+        return self.principal + self.gain
+
+    def advance_one_year(self, change_rate: decimal.Decimal):
+
+        self.gain += self.value * (change_rate - self.annual_management_cost_rate)
+
+    def sell(self, amount: decimal.Decimal):
+
+        if amount < 0:
+            raise ValueError(f"amount value should be non-negative, got {amount}")
+
+        if amount > self.value:
+            raise ValueError(
+                f"amount value {amount} exceeds current value {self.value}"
+            )
+
+        gain_ratio = self.gain / self.value
+
+        withdrawal_from_gain = gain_ratio * amount
+        withdrawal_from_principal = amount - withdrawal_from_gain
+
+        self.principal -= withdrawal_from_principal
+        self.gain -= withdrawal_from_gain
+
+    def buy(self, amount: decimal.Decimal):
+
+        if amount <= 0:
+            raise ValueError(f"amount value should be non-negative, got {amount}")
+
+        self.principal += amount
+
+
 @beartype.beartype
 class OrdinaryInvestmentAccount:
 
@@ -334,7 +387,7 @@ class InvestmentManager(typing.Protocol):
     def after_tax_portfolio_value(self) -> decimal.Decimal:
         ...
 
-    def advance_one_year(self, year: int):
+    def advance_one_year(self):
         ...
 
     def deposit(self, amount: decimal.Decimal, age: int):
@@ -343,7 +396,7 @@ class InvestmentManager(typing.Protocol):
     def withdraw(self, desired_cash: decimal.Decimal):
         ...
 
-    def optimize_investments(self, age: int):
+    def optimize_investments(self):
         ...
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
@@ -380,6 +433,12 @@ class SimpleInvestmentManager:
         self.simulation_start_age = simulation_start_age
         self.simulation_start_year = simulation_start_year
 
+        self.current_year = simulation_start_year
+
+    @property
+    def _current_age(self) -> int:
+        return self.simulation_start_age + self.current_year - self.simulation_start_year
+
     @property
     def portfolio_value(self) -> decimal.Decimal:
         return \
@@ -397,12 +456,14 @@ class SimpleInvestmentManager:
             self.old_nisa_account.portfolio_value + \
             self.nisa_account.portfolio_value
 
-    def advance_one_year(self, year):
+    def advance_one_year(self):
 
         self.ordinary_investment_account.advance_one_year()
         self.ideco_investment_account.advance_one_year()
-        self.old_nisa_account.advance_one_year(year)
+        self.old_nisa_account.advance_one_year(self.current_year)
         self.nisa_account.advance_one_year()
+
+        self.current_year += 1
 
     def deposit(self, amount: decimal.Decimal, age: int):
 
@@ -423,15 +484,13 @@ class SimpleInvestmentManager:
 
         if self.nisa_account.principal < self.nisa_account.total_deposit_limit:
 
-            current_year = self.simulation_start_year + age - self.simulation_start_age
-
             amount_deposited_to_nisa = min(
                 self.nisa_account.total_deposit_limit - self.nisa_account.principal,
-                self.nisa_account.annual_deposit_limit - self.nisa_account.year_to_deposit_map[current_year],
+                self.nisa_account.annual_deposit_limit - self.nisa_account.year_to_deposit_map[self.current_year],
                 amount
             )
 
-            self.nisa_account.deposit(amount_deposited_to_nisa, current_year)
+            self.nisa_account.deposit(amount_deposited_to_nisa, self.current_year)
             amount -= amount_deposited_to_nisa
 
             LOGGER.debug(
@@ -486,32 +545,28 @@ class SimpleInvestmentManager:
 
         if total_cash_withdrawn < desired_cash:
 
-            raise ValueError(f"Not enough funds to withdraw {desired_cash}")
+            raise InsufficientFunds(f"Not enough funds to withdraw {desired_cash}")
 
-    def optimize_investments(self, age: int):
+    def optimize_investments(self):
         """
         Optimize investments based on the investment policy.
         """
 
-        current_year = self.simulation_start_year + (age - self.simulation_start_age)
-
         # Check if any old nisa account portfolio has to be liquidated
-        if (current_year - 20) in self.old_nisa_account.year_to_portfolio_map:
+        if (self.current_year - 20) in self.old_nisa_account.year_to_portfolio_map:
 
-            portfolio_value = self.old_nisa_account.year_to_portfolio_map.pop(current_year - 20)
+            portfolio_value = self.old_nisa_account.year_to_portfolio_map.pop(self.current_year - 20)
             self.ordinary_investment_account.deposit(portfolio_value)
 
             LOGGER.debug(
                 f"Moved {utilities.format_million_yen(portfolio_value)} from old NISA account "
-                f"for year {current_year - 20} to ordinary investment account"
+                f"for year {self.current_year - 20} to ordinary investment account"
             )
 
         # Check if we should do lump withdrawal from iDeCo
-        if age == self.investment_policy.ideco.withdrawal_start_age:
+        if self._current_age == self.investment_policy.ideco.withdrawal_start_age:
 
-            year = self.simulation_start_year + age - self.simulation_start_age
-
-            tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(year)
+            tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(self.current_year)
             self.ordinary_investment_account.deposit(tax_free_lump_sum)
 
             LOGGER.debug(
@@ -527,7 +582,7 @@ class SimpleInvestmentManager:
             )
 
             self.ordinary_investment_account.withdraw(nisa_deposit)
-            self.nisa_account.deposit(nisa_deposit, self.simulation_start_year + age - self.simulation_start_year)
+            self.nisa_account.deposit(nisa_deposit, self.current_year)
 
             LOGGER.debug(
                 f"Moved {utilities.format_million_yen(nisa_deposit)} "

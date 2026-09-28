@@ -7,6 +7,58 @@ import yenwealth.constants
 import yenwealth.investments
 
 
+class TestAsset:
+
+    def test_sell(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(60),
+            annual_management_cost_rate=decimal.Decimal(0)
+        )
+
+        asset.sell(decimal.Decimal(50))
+
+        assert asset.principal == decimal.Decimal("68.75")
+        assert asset.gain == decimal.Decimal("41.25")
+        assert asset.value == decimal.Decimal(110)
+
+    def test_advance_one_year(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(60),
+            annual_management_cost_rate=decimal.Decimal("0.1")
+        )
+
+        assert asset.value == decimal.Decimal(160)
+
+        asset.advance_one_year(change_rate=decimal.Decimal("0.15"))
+
+        assert asset.value == decimal.Decimal(168)
+        assert asset.principal == decimal.Decimal(100)
+        assert asset.gain == decimal.Decimal(68)
+
+    def test_buy(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(60),
+            annual_management_cost_rate=decimal.Decimal("0.1")
+        )
+
+        assert asset.value == decimal.Decimal(160)
+
+        asset.buy(decimal.Decimal(20))
+
+        assert asset.principal == decimal.Decimal(120)
+        assert asset.gain == decimal.Decimal(60)
+        assert asset.value == decimal.Decimal(180)
+
+
 class TestOrdinaryInvestmentAccount:
     """
     Test for OrdinaryInvestmentAccount
@@ -514,8 +566,9 @@ class TestInvestmentManager:
         # Current year = start_year (2024) + age (50) - start_age (30) = 2044
         # 20 years prior = 2024. Populate Old NISA portfolio for 2024
         investment_manager.old_nisa_account.year_to_portfolio_map = {2024: decimal.Decimal(1_000_000)}
+        investment_manager.current_year = 2044
 
-        investment_manager.optimize_investments(age=50)
+        investment_manager.optimize_investments()
 
         # 2024 Old NISA portfolio should be removed and moved into NISA Account
         assert 2024 not in investment_manager.old_nisa_account.year_to_portfolio_map
@@ -525,8 +578,10 @@ class TestInvestmentManager:
 
         investment_manager.ideco_investment_account.portfolio_value = decimal.Decimal(10_000_000)
 
-        # Set age to policy withdrawal_start_age (75)
-        investment_manager.optimize_investments(age=75)
+        # Year at which we hit age of 75, and ideco policy was set to do lump withdrawal at that age
+        investment_manager.current_year = 2069
+
+        investment_manager.optimize_investments()
 
         # 1. iDeCo 10M transferred to Ordinary Account tax-free
         # 2. Ordinary Account then transfers 3.6M (annual limit) to NISA Account
