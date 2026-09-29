@@ -157,70 +157,6 @@ class OrdinaryInvestmentAccount:
 
     def __init__(
         self,
-        principal: decimal.Decimal,
-        gain: decimal.Decimal,
-        assets: list[Asset],
-        investment_return_rate: decimal.Decimal,
-        capital_gain_tax_rate: decimal.Decimal = decimal.Decimal("0.20325")
-    ):
-
-        self.investment_return_rate = investment_return_rate
-        self.capital_gain_tax_rate = capital_gain_tax_rate
-        self.principal = principal
-        self.gain = gain
-        self.assets = assets
-
-    @property
-    def portfolio_value(self) -> decimal.Decimal:
-        return self.principal + self.gain
-
-    def deposit(self, amount: decimal.Decimal):
-
-        if amount < 0:
-            raise ValueError(f"Deposit amount should be non-negative, got {amount}")
-
-        self.principal += amount
-
-    def advance_one_year(self, investment_returns: dict):
-
-        self.gain += self.investment_return_rate * (self.principal + self.gain)
-
-    def withdraw(self, desired_cash: decimal.Decimal):
-
-        if desired_cash < 0:
-            raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
-
-        gain_ratio = self.gain / self.portfolio_value
-
-        # Calculate gross amount needed to liquidate
-        gross_withdrawal = desired_cash / (1 - (gain_ratio * self.capital_gain_tax_rate))
-
-        if gross_withdrawal > self.portfolio_value:
-            raise ValueError(
-                f"Gross withdrawal value {gross_withdrawal} needed to realize desired cash "
-                f"{desired_cash} exceeds portfolio value {self.portfolio_value}"
-            )
-
-        # Proportional splits
-        principal_withdrawn = gross_withdrawal * (1 - gain_ratio)
-        gain_withdrawn = gross_withdrawal * gain_ratio
-
-        # Deduct proportionally from remaining balances
-        self.principal -= principal_withdrawn
-        self.gain -= gain_withdrawn
-
-    @property
-    def max_cash_withdrawal(self) -> decimal.Decimal:
-
-        return (self.portfolio_value - (self.capital_gain_tax_rate * self.gain)) \
-            .quantize(constants.YEN, decimal.ROUND_DOWN)
-
-
-@beartype.beartype
-class OrdinaryInvestmentAccountV2:
-
-    def __init__(
-        self,
         asset_map: dict[str, Asset],
         capital_gain_tax_rate: decimal.Decimal = decimal.Decimal("0.20325")
     ):
@@ -270,6 +206,13 @@ class OrdinaryInvestmentAccountV2:
             gross_sale = net_sale / net_proceeds_ratio
 
             asset.sell(gross_sale)
+
+    @property
+    def max_cash_withdrawal(self) -> decimal.Decimal:
+
+        net_values = [asset.value - (asset.gain * self.capital_gain_tax_rate) for asset in self.asset_map.values()]
+
+        return decimal.Decimal(sum(net_values)).quantize(constants.YEN, decimal.ROUND_DOWN)
 
 
 @beartype.beartype
@@ -512,7 +455,13 @@ class IdecoPolicy(pydantic.BaseModel):
 
 
 class InvestmentPolicy(pydantic.BaseModel):
+
+    # Needed to use protocol-based deposit and withdraw strategies
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
     ideco: IdecoPolicy
+    ordinary_account_deposit_strategy: DepositStrategy
+    ordinary_account_withdraw_strategy: WithdrawStrategy
 
 
 class InvestmentManager(typing.Protocol):
@@ -638,7 +587,7 @@ class SimpleInvestmentManager:
 
         if amount > 0:
 
-            self.ordinary_investment_account.deposit(amount)
+            self.ordinary_investment_account.deposit(amount, self.investment_policy.ordinary_account_deposit_strategy)
             LOGGER.debug(
                 f"Deposited {utilities.format_million_yen(amount)} to ordinary investment account")
 
@@ -659,7 +608,10 @@ class SimpleInvestmentManager:
 
         if withdrawal_from_ordinary_account > 0:
 
-            self.ordinary_investment_account.withdraw(withdrawal_from_ordinary_account)
+            self.ordinary_investment_account.withdraw(
+                withdrawal_from_ordinary_account,
+                self.investment_policy.ordinary_account_withdraw_strategy)
+
             total_cash_withdrawn += withdrawal_from_ordinary_account
 
         withdrawal_from_old_nisa = min(
@@ -696,7 +648,10 @@ class SimpleInvestmentManager:
         if (self.current_year - 20) in self.old_nisa_account.year_to_portfolio_map:
 
             portfolio_value = self.old_nisa_account.year_to_portfolio_map.pop(self.current_year - 20)
-            self.ordinary_investment_account.deposit(portfolio_value)
+
+            self.ordinary_investment_account.deposit(
+                portfolio_value,
+                self.investment_policy.ordinary_account_deposit_strategy)
 
             LOGGER.debug(
                 f"Moved {utilities.format_million_yen(portfolio_value)} from old NISA account "
@@ -707,7 +662,10 @@ class SimpleInvestmentManager:
         if self._current_age == self.investment_policy.ideco.withdrawal_start_age:
 
             tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(self.current_year)
-            self.ordinary_investment_account.deposit(tax_free_lump_sum)
+
+            self.ordinary_investment_account.deposit(
+                tax_free_lump_sum,
+                self.investment_policy.ordinary_account_deposit_strategy)
 
             LOGGER.debug(
                 f"Withdrew tax-free lump sum of {utilities.format_million_yen(tax_free_lump_sum)} "
@@ -721,7 +679,10 @@ class SimpleInvestmentManager:
                 self.ordinary_investment_account.max_cash_withdrawal
             )
 
-            self.ordinary_investment_account.withdraw(nisa_deposit)
+            self.ordinary_investment_account.withdraw(
+                nisa_deposit,
+                self.investment_policy.ordinary_account_withdraw_strategy)
+
             self.nisa_account.deposit(nisa_deposit, self.current_year)
 
             LOGGER.debug(
