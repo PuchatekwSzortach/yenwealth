@@ -111,6 +111,47 @@ class ProportionalDepositStrategy(DepositStrategy):
         }
 
 
+@typing.runtime_checkable
+@beartype.beartype
+class WithdrawStrategy(typing.Protocol):
+
+    def calculate_withdrawal_amounts(
+        self,
+        amount: decimal.Decimal,
+        asset_map: dict[str, decimal.Decimal],
+    ) -> dict[str, decimal.Decimal]:
+        ...
+
+
+class SequentialWithdrawStrategy(WithdrawStrategy):
+
+    def __init__(self, withdraw_order: list[str]):
+        self.withdraw_order = withdraw_order
+
+    def calculate_withdrawal_amounts(
+        self,
+        amount: decimal.Decimal,
+        asset_map: dict[str, decimal.Decimal],
+    ) -> dict[str, decimal.Decimal]:
+
+        remaining = amount
+        withdrawals = {}
+
+        for asset_name in self.withdraw_order:
+
+            withdrawal = min(remaining, asset_map[asset_name])
+
+            if withdrawal > 0:
+                withdrawals[asset_name] = withdrawal
+
+            remaining -= withdrawal
+
+            if remaining == 0:
+                return withdrawals
+
+        raise InsufficientFunds
+
+
 @beartype.beartype
 class OrdinaryInvestmentAccount:
 

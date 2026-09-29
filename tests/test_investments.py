@@ -100,6 +100,56 @@ class TestProportionalDepositStrategy:
         }
 
 
+class TestSequentiallWithdrawStrategy:
+
+    def test_withdraws_from_first_asset_only(self):
+
+        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGG", "VGT"])
+
+        result = strategy.calculate_withdrawal_amounts(
+            decimal.Decimal(4000),
+            {
+                "VGG": decimal.Decimal(10000),
+                "VGT": decimal.Decimal(20000)
+            }
+        )
+
+        assert result == {
+            "VGG": decimal.Decimal(4000)
+        }
+
+    def test_moves_to_next_asset_when_first_is_depleted(self):
+
+        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGG", "VGT"])
+
+        result = strategy.calculate_withdrawal_amounts(
+            decimal.Decimal(15000),
+            {
+                "VGG": decimal.Decimal(10000),
+                "VGT": decimal.Decimal(20000)
+            }
+        )
+
+        assert result == {
+            "VGG": decimal.Decimal(10000),
+            "VGT": decimal.Decimal(5000),
+        }
+
+    def test_raises_if_all_assets_are_insufficient(self):
+
+        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGG", "VGT"])
+
+        with pytest.raises(yenwealth.investments.InsufficientFunds):
+
+            strategy.calculate_withdrawal_amounts(
+                decimal.Decimal(31000),
+                {
+                    "VGG": decimal.Decimal(10000),
+                    "VGT": decimal.Decimal(20000)
+                }
+            )
+
+
 class TestOrdinaryInvestmentAccount:
     """
     Test for OrdinaryInvestmentAccount
