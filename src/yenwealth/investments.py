@@ -71,12 +71,53 @@ class Asset:
 
 
 @beartype.beartype
+class DepositStrategy(typing.Protocol):
+
+    def allocate(
+        self,
+        amount: decimal.Decimal,
+        assets: list[str],
+    ) -> dict[str, decimal.Decimal]:
+        ...
+
+
+class ProportionalDepositStrategy(DepositStrategy):
+
+    def __init__(self, weights: dict):
+
+        self.weights = weights
+
+    def allocate(self, amount: decimal.Decimal, assets: list[str]) -> dict[str, decimal.Decimal]:
+
+        missing = set(assets) - self.weights.keys()
+
+        if missing:
+            raise ValueError(f"Missing weights for assets: {missing}")
+
+        weights = {
+            asset: self.weights[asset]
+            for asset in assets
+        }
+
+        total_weight = sum(weights.values())
+
+        if total_weight <= 0:
+            raise ValueError("Total weight must be positive")
+
+        return {
+            asset: amount * weight / total_weight
+            for asset, weight in weights.items()
+        }
+
+
+@beartype.beartype
 class OrdinaryInvestmentAccount:
 
     def __init__(
         self,
         principal: decimal.Decimal,
         gain: decimal.Decimal,
+        assets: list[Asset],
         investment_return_rate: decimal.Decimal,
         capital_gain_tax_rate: decimal.Decimal = decimal.Decimal("0.20325")
     ):
@@ -85,6 +126,7 @@ class OrdinaryInvestmentAccount:
         self.capital_gain_tax_rate = capital_gain_tax_rate
         self.principal = principal
         self.gain = gain
+        self.assets = assets
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
@@ -97,7 +139,7 @@ class OrdinaryInvestmentAccount:
 
         self.principal += amount
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
 
         self.gain += self.investment_return_rate * (self.principal + self.gain)
 
@@ -169,7 +211,7 @@ class IdecoInvestmentAccount:
 
         self.portfolio_value += amount
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
 
         self.portfolio_value = self.portfolio_value * (1 + self.investment_return_rate)
 
@@ -245,7 +287,7 @@ class OldNisaAccount:
         self.year_to_portfolio_map = copy.deepcopy(year_to_portfolio_map)
         self.investment_return_rate = investment_return_rate
 
-    def advance_one_year(self, year: int):
+    def advance_one_year(self, investment_returns: dict, year: int):
 
         for investment_year in self.year_to_portfolio_map:
 
@@ -349,7 +391,7 @@ class NisaAccount:
         self.year_to_deposit_map[year] += amount
         self.principal += amount
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
 
         self.gain += self.investment_return_rate * (self.principal + self.gain)
 
@@ -387,7 +429,7 @@ class InvestmentManager(typing.Protocol):
     def after_tax_portfolio_value(self) -> decimal.Decimal:
         ...
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
         ...
 
     def deposit(self, amount: decimal.Decimal, age: int):
@@ -456,12 +498,12 @@ class SimpleInvestmentManager:
             self.old_nisa_account.portfolio_value + \
             self.nisa_account.portfolio_value
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
 
-        self.ordinary_investment_account.advance_one_year()
-        self.ideco_investment_account.advance_one_year()
-        self.old_nisa_account.advance_one_year(self.current_year)
-        self.nisa_account.advance_one_year()
+        self.ordinary_investment_account.advance_one_year(investment_returns)
+        self.ideco_investment_account.advance_one_year(investment_returns)
+        self.old_nisa_account.advance_one_year(investment_returns, self.current_year)
+        self.nisa_account.advance_one_year(investment_returns)
 
         self.current_year += 1
 

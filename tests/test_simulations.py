@@ -42,7 +42,7 @@ class FakeInvestmentManager:
         self.calls.append(("deposit", amount, age))
         self.portfolio_value += amount
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
         self.current_year += 1
         self.calls.append(("advance_one_year", self.current_year))
 
@@ -54,6 +54,7 @@ def make_inputs(
     investment_manager: yenwealth.investments.InvestmentManager,
     *,
     start_age: int,
+    start_year: int,
     end_age: int,
     costs: decimal.Decimal,
     income: decimal.Decimal,
@@ -66,12 +67,21 @@ def make_inputs(
         inflation_over_time=pandas.DataFrame({"inflation_rate": [0.03] * simulation_steps})
     )
 
+    index = range(start_year, start_year + simulation_steps)
+
+    simulated_economic_data.return_on_assets_over_time.index = index
+    simulated_economic_data.return_on_assets_over_time.index.name = "year"
+
+    simulated_economic_data.inflation_over_time.index = index
+    simulated_economic_data.inflation_over_time.index.name = "year"
+
     return yenwealth.simulations.FinancesSimulatorInputs(
         annual_costs_callable=lambda age: costs,
         earned_annual_income_callable=lambda age: income,
         investment_manager=investment_manager,
         simulated_economic_data=simulated_economic_data,
         simulation_start_age=start_age,
+        simulation_start_year=start_year,
         simulation_end_age=end_age
     )
 
@@ -88,6 +98,7 @@ def test_simulation_contains_initial_state():
         make_inputs(
             investment_manager,
             start_age=50,
+            start_year=2026,
             end_age=50,
             costs=decimal.Decimal(100),
             income=decimal.Decimal(100)
@@ -114,6 +125,7 @@ def test_simulation_runs_until_end_age():
         make_inputs(
             investment_manager,
             start_age=50,
+            start_year=2026,
             end_age=52,
             costs=decimal.Decimal(0),
             income=decimal.Decimal(0),
@@ -137,6 +149,7 @@ def test_simulation_stops_when_portfolio_is_depleted():
         make_inputs(
             investment_manager,
             start_age=50,
+            start_year=2026,
             end_age=55,
             costs=decimal.Decimal(60),
             income=decimal.Decimal(0),
@@ -169,6 +182,7 @@ def test_surplus_income_is_deposited():
             costs=decimal.Decimal(80),
             income=decimal.Decimal(100),
             start_age=50,
+            start_year=2026,
             end_age=51,
         )
     )
@@ -195,6 +209,7 @@ def test_insufficient_income_causes_withdrawal():
             costs=decimal.Decimal(100),
             income=decimal.Decimal(80),
             start_age=50,
+            start_year=2026,
             end_age=50,
         )
     )
@@ -221,6 +236,7 @@ def test_income_equal_to_costs_causes_neither():
             costs=decimal.Decimal(100),
             income=decimal.Decimal(100),
             start_age=50,
+            start_year=2026,
             end_age=50,
         )
     )
@@ -254,6 +270,7 @@ def test_callables_are_called_with_correct_ages():
     inputs = make_inputs(
         investment_manager,
         start_age=50,
+        start_year=2026,
         end_age=52,
         costs=decimal.Decimal(100),
         income=decimal.Decimal(80)
@@ -282,6 +299,7 @@ def test_investment_manager_operations_are_called_in_correct_order():
         make_inputs(
             investment_manager,
             start_age=50,
+            start_year=2026,
             end_age=50,
             costs=decimal.Decimal(100),
             income=decimal.Decimal(80),

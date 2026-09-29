@@ -59,6 +59,47 @@ class TestAsset:
         assert asset.value == decimal.Decimal(180)
 
 
+class TestProportionalDepositStrategy:
+
+    def test_proportional_allocation(self):
+
+        strategy = yenwealth.investments.ProportionalDepositStrategy(
+            {
+                "VGT": decimal.Decimal(5),
+                "S&P500": decimal.Decimal(10),
+            }
+        )
+
+        result = strategy.allocate(
+            decimal.Decimal(15000),
+            ["VGT", "S&P500"],
+        )
+
+        assert result == {
+            "VGT": decimal.Decimal(5000),
+            "S&P500": decimal.Decimal(10000),
+        }
+
+    def test_allocation_with_zero_weight(self):
+
+        strategy = yenwealth.investments.ProportionalDepositStrategy(
+            {
+                "VGT": decimal.Decimal(1),
+                "S&P500": decimal.Decimal(0),
+            }
+        )
+
+        result = strategy.allocate(
+            decimal.Decimal(10000),
+            ["VGT", "S&P500"],
+        )
+
+        assert result == {
+            "VGT": decimal.Decimal(10000),
+            "S&P500": decimal.Decimal(0),
+        }
+
+
 class TestOrdinaryInvestmentAccount:
     """
     Test for OrdinaryInvestmentAccount
@@ -69,6 +110,7 @@ class TestOrdinaryInvestmentAccount:
         assert yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(0),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         ).portfolio_value == decimal.Decimal(0)
@@ -78,6 +120,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2"))
 
@@ -96,17 +139,18 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
 
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, 1000, rel_tol=1e-2)
         assert math.isclose(investment_account.gain, 100, rel_tol=1e-2)
         assert math.isclose(investment_account.portfolio_value, 1100, rel_tol=1e-2)
 
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, 1000, rel_tol=1e-2)
         assert math.isclose(investment_account.gain, 210, rel_tol=1e-2)
@@ -118,7 +162,7 @@ class TestOrdinaryInvestmentAccount:
         assert math.isclose(investment_account.gain, 210, rel_tol=1e-2)
         assert math.isclose(investment_account.portfolio_value, 2210, rel_tol=1e-2)
 
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, 2000, rel_tol=1e-2)
         assert math.isclose(investment_account.gain, 431, rel_tol=1e-2)
@@ -129,6 +173,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2"))
 
@@ -140,12 +185,13 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
 
-        investment_account.advance_one_year()
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
         assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
@@ -162,12 +208,13 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
 
-        investment_account.advance_one_year()
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
         assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
@@ -182,6 +229,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2"))
 
@@ -193,12 +241,13 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
 
-        investment_account.advance_one_year()
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
         assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
@@ -290,7 +339,7 @@ class TestOldNisaAccount:
             investment_return_rate=decimal.Decimal("0.1")
         )
 
-        nisa.advance_one_year(2025)
+        nisa.advance_one_year(investment_returns={}, year=2025)
 
         assert abs(nisa.year_to_portfolio_map[2020] - decimal.Decimal(110)) < decimal.Decimal("0.001")
         assert abs(nisa.year_to_portfolio_map[2021] - decimal.Decimal(55)) < decimal.Decimal("0.001")
@@ -306,7 +355,7 @@ class TestOldNisaAccount:
         )
 
         with pytest.raises(ValueError):
-            nisa.advance_one_year(2041)
+            nisa.advance_one_year(investment_returns={}, year=2041)
 
     def test_withdraw_for_invalid_year(self):
 
@@ -414,7 +463,7 @@ class TestNisaAccount:
             investment_return_rate=decimal.Decimal("0.1")
         )
 
-        nisa.advance_one_year()
+        nisa.advance_one_year(investment_returns={})
 
         assert nisa.principal == decimal.Decimal(100)
         assert nisa.gain == decimal.Decimal(10)
@@ -426,7 +475,7 @@ class TestNisaAccount:
         assert nisa.gain == decimal.Decimal(10)
         assert nisa.portfolio_value == decimal.Decimal(160)
 
-        nisa.advance_one_year()
+        nisa.advance_one_year(investment_returns={})
 
         assert nisa.principal == decimal.Decimal(150)
         assert nisa.gain == decimal.Decimal(26)
@@ -494,6 +543,7 @@ class TestInvestmentManager:
         ordinary = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(0),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.05"),
             capital_gain_tax_rate=decimal.Decimal("0.20")
         )

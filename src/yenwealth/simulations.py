@@ -57,6 +57,7 @@ class FinancesSimulatorInputs:
     investment_manager: investments.InvestmentManager
     simulated_economic_data: core.EconomicData
     simulation_start_age: int
+    simulation_start_year: int
     simulation_end_age: int
 
     def __post_init__(self):
@@ -75,7 +76,7 @@ class FinancesSimulator:
     def run_simulation(self) -> pandas.DataFrame:
 
         current_age = self.inputs.simulation_start_age
-        current_year = self.investment_manager.simulation_start_year
+        current_year = self.inputs.simulation_start_year
 
         simulation_step_count = self.inputs.simulation_end_age - self.inputs.simulation_start_age + 1
 
@@ -147,7 +148,15 @@ class FinancesSimulator:
                     LOGGER.debug(
                         f"Portfolio value at age {current_age} - after withdrawals and deposits:\n{portfolio_summary}")
 
-                self.investment_manager.advance_one_year()
+                raw_investment_returns = self.inputs.simulated_economic_data. \
+                    return_on_assets_over_time.loc[current_year].to_dict()
+
+                inflation_rate = self.inputs.simulated_economic_data.inflation_over_time.loc[current_year] \
+                    .to_dict()["inflation_rate"]
+
+                investment_returns = {key: value - inflation_rate for (key, value) in raw_investment_returns.items()}
+
+                self.investment_manager.advance_one_year(investment_returns=investment_returns)
 
                 simulation_index = current_age - self.inputs.simulation_start_age
 
