@@ -1,5 +1,4 @@
 import decimal
-import math
 
 import pytest
 
@@ -100,159 +99,226 @@ class TestProportionalDepositStrategy:
         }
 
 
-class TestOrdinaryInvestmentAccount:
-    """
-    Test for OrdinaryInvestmentAccount
-    """
+class TestSequentiallWithdrawStrategy:
 
-    def test_value_of_portfolio_without_investments(self):
+    def test_withdraws_from_first_asset_only(self):
 
-        assert yenwealth.investments.OrdinaryInvestmentAccount(
-            principal=decimal.Decimal(0),
-            gain=decimal.Decimal(0),
-            assets=[],
-            investment_return_rate=decimal.Decimal("0.1"),
-            capital_gain_tax_rate=decimal.Decimal("0.2")
-        ).portfolio_value == decimal.Decimal(0)
+        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGG", "VGT"])
 
-    def test_value_of_portfolio_with_investments(self):
-
-        investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
-            principal=decimal.Decimal(1000),
-            gain=decimal.Decimal(0),
-            assets=[],
-            investment_return_rate=decimal.Decimal("0.1"),
-            capital_gain_tax_rate=decimal.Decimal("0.2"))
-
-        assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, decimal.Decimal(0), rel_tol=1e-2)
-        assert math.isclose(investment_account.portfolio_value, decimal.Decimal(1000), rel_tol=1e-2)
-
-        investment_account.deposit(decimal.Decimal(10))
-
-        assert math.isclose(investment_account.principal, decimal.Decimal(1010), rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, decimal.Decimal(0), rel_tol=1e-2)
-        assert math.isclose(investment_account.portfolio_value, decimal.Decimal(1010), rel_tol=1e-2)
-
-    def test_advancement_of_portfolio_value_over_time(self):
-
-        investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
-            principal=decimal.Decimal(1000),
-            gain=decimal.Decimal(0),
-            assets=[],
-            investment_return_rate=decimal.Decimal("0.1"),
-            capital_gain_tax_rate=decimal.Decimal("0.2")
+        result = strategy.calculate_withdrawal_amounts(
+            decimal.Decimal(4000),
+            {
+                "VGG": decimal.Decimal(10000),
+                "VGT": decimal.Decimal(20000)
+            }
         )
 
-        investment_account.advance_one_year(investment_returns={})
+        assert result == {
+            "VGG": decimal.Decimal(4000)
+        }
 
-        assert math.isclose(investment_account.principal, 1000, rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, 100, rel_tol=1e-2)
-        assert math.isclose(investment_account.portfolio_value, 1100, rel_tol=1e-2)
+    def test_moves_to_next_asset_when_first_is_depleted(self):
 
-        investment_account.advance_one_year(investment_returns={})
+        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGG", "VGT"])
 
-        assert math.isclose(investment_account.principal, 1000, rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, 210, rel_tol=1e-2)
-        assert math.isclose(investment_account.portfolio_value, 1210, rel_tol=1e-2)
+        result = strategy.calculate_withdrawal_amounts(
+            decimal.Decimal(15000),
+            {
+                "VGG": decimal.Decimal(10000),
+                "VGT": decimal.Decimal(20000)
+            }
+        )
 
-        investment_account.deposit(amount=decimal.Decimal(1000))
+        assert result == {
+            "VGG": decimal.Decimal(10000),
+            "VGT": decimal.Decimal(5000),
+        }
 
-        assert math.isclose(investment_account.principal, 2000, rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, 210, rel_tol=1e-2)
-        assert math.isclose(investment_account.portfolio_value, 2210, rel_tol=1e-2)
+    def test_raises_if_all_assets_are_insufficient(self):
 
-        investment_account.advance_one_year(investment_returns={})
+        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGG", "VGT"])
 
-        assert math.isclose(investment_account.principal, 2000, rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, 431, rel_tol=1e-2)
-        assert math.isclose(investment_account.portfolio_value, 2431, rel_tol=1e-2)
+        with pytest.raises(yenwealth.investments.InsufficientFunds):
+
+            strategy.calculate_withdrawal_amounts(
+                decimal.Decimal(31000),
+                {
+                    "VGG": decimal.Decimal(10000),
+                    "VGT": decimal.Decimal(20000)
+                }
+            )
+
+
+class TestOrdinaryInvestmentAccount:
+
+    def test_portolio_value(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            }
+        )
+
+        assert decimal.Decimal(40) == account.portfolio_value
+
+    def test_deposit(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            }
+        )
+
+        strategy = yenwealth.investments.ProportionalDepositStrategy(
+            weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(3)}
+        )
+
+        account.deposit(amount=decimal.Decimal(10), strategy=strategy)
+
+        assert account.asset_map["VGT"].principal == decimal.Decimal("12.5")
+        assert account.asset_map["VOO"].principal == decimal.Decimal("27.5")
+
+    def test_advance_one_year(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            }
+        )
+
+        account.advance_one_year(
+            investment_returns={
+                "VGT": decimal.Decimal("0.2"),
+                "VOO": decimal.Decimal("-0.1")
+            }
+        )
+
+        assert account.asset_map["VGT"].gain == decimal.Decimal("6.5")
+        assert account.asset_map["VOO"].gain == decimal.Decimal(0)
 
     def test_withdraw_over_portfolio_value(self):
 
-        investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
-            principal=decimal.Decimal(1000),
-            gain=decimal.Decimal(0),
-            assets=[],
-            investment_return_rate=decimal.Decimal("0.1"),
-            capital_gain_tax_rate=decimal.Decimal("0.2"))
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            },
+            capital_gain_tax_rate=decimal.Decimal("0.2")
+        )
 
-        with pytest.raises(ValueError):
-            investment_account.withdraw(desired_cash=decimal.Decimal(2000))
+        with pytest.raises(yenwealth.investments.InsufficientFunds):
+
+            account.withdraw(
+                desired_cash=decimal.Decimal(50),
+                strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+            )
 
     def test_withdraw(self):
 
-        investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
-            principal=decimal.Decimal(1000),
-            gain=decimal.Decimal(0),
-            assets=[],
-            investment_return_rate=decimal.Decimal("0.1"),
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(80),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            },
+            capital_gain_tax_rate=decimal.Decimal("0.5")
+        )
+
+        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+
+        account.withdraw(
+            desired_cash=decimal.Decimal(44),
+            strategy=strategy
+        )
+
+        # We would expect that with capital gain tax rate of 0.5, VGT asset can provide 12.5 units
+        # (10 untaxed from prinicipal, then 5 gross (2.5 net) from gain)
+        # Then VOO needs to provide net amount of 31.5 units.
+        # VOO has 80% gain and we need to pay 50% capital gain tax on it, so net cash per 1 unit sold should be
+        # 1 - (0.8 * 0.5) = 0.6.
+        # So to realize 31.5 units of net cash, we need a gross sale of 31.5 / 0.6 or 52.5.
+        # 20% of VOO is principal, and 20% of 52.5 is 10.5, so principal should go down from 20 to 9.5.
+        # Remaining 42 comes from gain, so gain should come down to 38
+
+        assert account.asset_map["VGT"].value == decimal.Decimal(0)
+
+        assert account.asset_map["VOO"].principal == decimal.Decimal("9.5")
+        assert account.asset_map["VOO"].gain == decimal.Decimal(38)
+        assert account.asset_map["VOO"].value == decimal.Decimal("47.5")
+
+    def test_max_cash_widthdrawal(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(80),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            },
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
 
-        investment_account.advance_one_year(investment_returns={})
-        investment_account.advance_one_year(investment_returns={})
-
-        assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
-        assert math.isclose(investment_account.portfolio_value, decimal.Decimal(1210), rel_tol=1e-2)
-
-        investment_account.withdraw(desired_cash=decimal.Decimal(500))
-
-        assert math.isclose(investment_account.principal, decimal.Decimal("571.9178"), rel_tol=1e-4)
-        assert math.isclose(investment_account.gain, decimal.Decimal("120.1027"), rel_tol=1e-4)
-        assert math.isclose(investment_account.portfolio_value, decimal.Decimal("692.0205"), rel_tol=1e-4)
-
-    def test_withdrawing_zero(self):
-
-        investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
-            principal=decimal.Decimal(1000),
-            gain=decimal.Decimal(0),
-            assets=[],
-            investment_return_rate=decimal.Decimal("0.1"),
-            capital_gain_tax_rate=decimal.Decimal("0.2")
-        )
-
-        investment_account.advance_one_year(investment_returns={})
-        investment_account.advance_one_year(investment_returns={})
-
-        assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
-
-        investment_account.withdraw(desired_cash=decimal.Decimal(0))
-
-        assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
-
-    def test_withdrawing_negative_amount(self):
-
-        investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
-            principal=decimal.Decimal(1000),
-            gain=decimal.Decimal(0),
-            assets=[],
-            investment_return_rate=decimal.Decimal("0.1"),
-            capital_gain_tax_rate=decimal.Decimal("0.2"))
-
-        with pytest.raises(ValueError):
-            investment_account.withdraw(desired_cash=decimal.Decimal(-100))
-
-    def test_max_cash_withdrawal(self):
-
-        investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
-            principal=decimal.Decimal(1000),
-            gain=decimal.Decimal(0),
-            assets=[],
-            investment_return_rate=decimal.Decimal("0.1"),
-            capital_gain_tax_rate=decimal.Decimal("0.2")
-        )
-
-        investment_account.advance_one_year(investment_returns={})
-        investment_account.advance_one_year(investment_returns={})
-
-        assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
-        assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
-
-        assert investment_account.max_cash_withdrawal == decimal.Decimal(1168)
+        assert account.max_cash_withdrawal == decimal.Decimal(98)
 
 
 class TestIdecoInvestmentAccount:
@@ -517,23 +583,6 @@ class TestNisaAccount:
         assert nisa.principal == decimal.Decimal(75)
 
 
-class TestInvestmentPolicy:
-
-    def test_construction_with_valid_data(self):
-
-        policy = yenwealth.investments.InvestmentPolicy.model_validate(
-            {
-                "ideco": {
-                    "withdrawal_start_age": 75,
-                    "withdrawal_period_in_years": 20
-                }
-            }
-        )
-
-        assert policy.ideco.withdrawal_start_age == 75
-        assert policy.ideco.withdrawal_period_in_years == 20
-
-
 class TestInvestmentManager:
 
     @pytest.fixture
@@ -541,10 +590,14 @@ class TestInvestmentManager:
 
         # 1. Ordinary Account: 0 principal, 0 gain, 0 tax for simple math
         ordinary = yenwealth.investments.OrdinaryInvestmentAccount(
-            principal=decimal.Decimal(0),
-            gain=decimal.Decimal(0),
-            assets=[],
-            investment_return_rate=decimal.Decimal("0.05"),
+            asset_map={
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(0),
+                    gain=decimal.Decimal(0),
+                    annual_management_cost_rate=decimal.Decimal(0)
+                )
+            },
             capital_gain_tax_rate=decimal.Decimal("0.20")
         )
 
@@ -573,7 +626,10 @@ class TestInvestmentManager:
             ideco=yenwealth.investments.IdecoPolicy(
                 withdrawal_start_age=75,
                 withdrawal_period_in_years=20
-            )
+            ),
+            ordinary_account_deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VOO": decimal.Decimal(1)}),
+            ordinary_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
         )
 
         return yenwealth.investments.SimpleInvestmentManager(
@@ -594,12 +650,12 @@ class TestInvestmentManager:
 
         assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal(276_000)
         assert investment_manager.nisa_account.principal == decimal.Decimal(3_600_000)
-        assert investment_manager.ordinary_investment_account.principal == decimal.Decimal(1_124_000)
+        assert investment_manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(1_124_000)
 
     def test_withdraw_priority(self, investment_manager):
 
         # Setup initial balances directly
-        investment_manager.ordinary_investment_account.principal = decimal.Decimal(1_000_000)
+        investment_manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
         investment_manager.old_nisa_account.year_to_portfolio_map = {2010: decimal.Decimal(500_000)}
         investment_manager.nisa_account.principal = decimal.Decimal(2_000_000)
 
@@ -637,4 +693,4 @@ class TestInvestmentManager:
         # 2. Ordinary Account then transfers 3.6M (annual limit) to NISA Account
         assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal(0)
         assert investment_manager.nisa_account.principal == decimal.Decimal(3_600_000)
-        assert investment_manager.ordinary_investment_account.principal == decimal.Decimal(6_400_000)
+        assert investment_manager.ordinary_investment_account.asset_map['VOO'].principal == decimal.Decimal(6_400_000)
