@@ -59,6 +59,47 @@ class TestAsset:
         assert asset.value == decimal.Decimal(180)
 
 
+class TestProportionalDepositStrategy:
+
+    def test_proportional_allocation(self):
+
+        strategy = yenwealth.investments.ProportionalDepositStrategy(
+            {
+                "VGT": decimal.Decimal(5),
+                "S&P500": decimal.Decimal(10),
+            }
+        )
+
+        result = strategy.allocate(
+            decimal.Decimal(15000),
+            ["VGT", "S&P500"],
+        )
+
+        assert result == {
+            "VGT": decimal.Decimal(5000),
+            "S&P500": decimal.Decimal(10000),
+        }
+
+    def test_allocation_with_zero_weight(self):
+
+        strategy = yenwealth.investments.ProportionalDepositStrategy(
+            {
+                "VGT": decimal.Decimal(1),
+                "S&P500": decimal.Decimal(0),
+            }
+        )
+
+        result = strategy.allocate(
+            decimal.Decimal(10000),
+            ["VGT", "S&P500"],
+        )
+
+        assert result == {
+            "VGT": decimal.Decimal(10000),
+            "S&P500": decimal.Decimal(0),
+        }
+
+
 class TestOrdinaryInvestmentAccount:
     """
     Test for OrdinaryInvestmentAccount
@@ -69,6 +110,7 @@ class TestOrdinaryInvestmentAccount:
         assert yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(0),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         ).portfolio_value == decimal.Decimal(0)
@@ -78,6 +120,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2"))
 
@@ -96,6 +139,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
@@ -129,6 +173,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2"))
 
@@ -140,6 +185,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
@@ -162,6 +208,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
@@ -182,6 +229,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2"))
 
@@ -193,6 +241,7 @@ class TestOrdinaryInvestmentAccount:
         investment_account = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(1000),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.1"),
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
@@ -494,6 +543,7 @@ class TestInvestmentManager:
         ordinary = yenwealth.investments.OrdinaryInvestmentAccount(
             principal=decimal.Decimal(0),
             gain=decimal.Decimal(0),
+            assets=[],
             investment_return_rate=decimal.Decimal("0.05"),
             capital_gain_tax_rate=decimal.Decimal("0.20")
         )

@@ -71,12 +71,53 @@ class Asset:
 
 
 @beartype.beartype
+class DepositStrategy(typing.Protocol):
+
+    def allocate(
+        self,
+        amount: decimal.Decimal,
+        assets: list[str],
+    ) -> dict[str, decimal.Decimal]:
+        ...
+
+
+class ProportionalDepositStrategy(DepositStrategy):
+
+    def __init__(self, weights: dict):
+
+        self.weights = weights
+
+    def allocate(self, amount: decimal.Decimal, assets: list[str]) -> dict[str, decimal.Decimal]:
+
+        missing = set(assets) - self.weights.keys()
+
+        if missing:
+            raise ValueError(f"Missing weights for assets: {missing}")
+
+        weights = {
+            asset: self.weights[asset]
+            for asset in assets
+        }
+
+        total_weight = sum(weights.values())
+
+        if total_weight <= 0:
+            raise ValueError("Total weight must be positive")
+
+        return {
+            asset: amount * weight / total_weight
+            for asset, weight in weights.items()
+        }
+
+
+@beartype.beartype
 class OrdinaryInvestmentAccount:
 
     def __init__(
         self,
         principal: decimal.Decimal,
         gain: decimal.Decimal,
+        assets: list[Asset],
         investment_return_rate: decimal.Decimal,
         capital_gain_tax_rate: decimal.Decimal = decimal.Decimal("0.20325")
     ):
@@ -85,6 +126,7 @@ class OrdinaryInvestmentAccount:
         self.capital_gain_tax_rate = capital_gain_tax_rate
         self.principal = principal
         self.gain = gain
+        self.assets = assets
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
