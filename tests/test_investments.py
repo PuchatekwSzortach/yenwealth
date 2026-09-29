@@ -385,6 +385,75 @@ class TestOrdinaryInvestmentAccountV2:
         assert account.asset_map["VGT"].gain == decimal.Decimal("6.5")
         assert account.asset_map["VOO"].gain == decimal.Decimal(0)
 
+    def test_withdraw_over_portfolio_value(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccountV2(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            },
+            capital_gain_tax_rate=decimal.Decimal("0.2")
+        )
+
+        with pytest.raises(yenwealth.investments.InsufficientFunds):
+
+            account.withdraw(
+                desired_cash=decimal.Decimal(50),
+                strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+            )
+
+    def test_withdrawx(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccountV2(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(80),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            },
+            capital_gain_tax_rate=decimal.Decimal("0.5")
+        )
+
+        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+
+        account.withdraw(
+            desired_cash=decimal.Decimal(44),
+            strategy=strategy
+        )
+
+        # We would expect that with capital gain tax rate of 0.5, VGT asset can provide 12.5 units
+        # (10 untaxed from prinicipal, then 5 gross (2.5 net) from gain)
+        # Then VOO needs to provide net amount of 31.5 units.
+        # VOO has 80% gain and we need to pay 50% capital gain tax on it, so net cash per 1 unit sold should be
+        # 1 - (0.8 * 0.5) = 0.6.
+        # So to realize 31.5 units of net cash, we need a gross sale of 31.5 / 0.6 or 52.5.
+        # 20% of VOO is principal, and 20% of 52.5 is 10.5, so principal should go down from 20 to 9.5.
+        # Remaining 42 comes from gain, so gain should come down to 38
+
+        assert account.asset_map["VGT"].value == decimal.Decimal(0)
+
+        assert account.asset_map["VOO"].principal == decimal.Decimal("9.5")
+        assert account.asset_map["VOO"].gain == decimal.Decimal(38)
+        assert account.asset_map["VOO"].value == decimal.Decimal("47.5")
+
 
 class TestIdecoInvestmentAccount:
 

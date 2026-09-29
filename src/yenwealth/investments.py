@@ -250,6 +250,27 @@ class OrdinaryInvestmentAccountV2:
         for name, asset in self.asset_map.items():
             asset.advance_one_year(investment_returns[name])
 
+    def withdraw(self, desired_cash: decimal.Decimal, strategy: WithdrawStrategy):
+
+        asset_to_net_value_map = {
+            name: asset.value - (asset.gain * self.capital_gain_tax_rate)
+            for name, asset in self.asset_map.items()
+        }
+
+        net_cash_withdrawals = strategy.calculate_withdrawal_amounts(
+            amount=desired_cash,
+            asset_map=asset_to_net_value_map
+        )
+
+        for name, net_sale in net_cash_withdrawals.items():
+
+            asset = self.asset_map[name]
+            gain_ratio = asset.gain / asset.value
+            net_proceeds_ratio = 1 - (gain_ratio * self.capital_gain_tax_rate)
+            gross_sale = net_sale / net_proceeds_ratio
+
+            asset.sell(gross_sale)
+
 
 @beartype.beartype
 class IdecoInvestmentAccount:
