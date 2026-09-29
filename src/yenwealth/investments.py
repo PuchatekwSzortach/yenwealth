@@ -97,7 +97,7 @@ class OrdinaryInvestmentAccount:
 
         self.principal += amount
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
 
         self.gain += self.investment_return_rate * (self.principal + self.gain)
 
@@ -169,7 +169,7 @@ class IdecoInvestmentAccount:
 
         self.portfolio_value += amount
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
 
         self.portfolio_value = self.portfolio_value * (1 + self.investment_return_rate)
 
@@ -245,7 +245,7 @@ class OldNisaAccount:
         self.year_to_portfolio_map = copy.deepcopy(year_to_portfolio_map)
         self.investment_return_rate = investment_return_rate
 
-    def advance_one_year(self, year: int):
+    def advance_one_year(self, investment_returns: dict, year: int):
 
         for investment_year in self.year_to_portfolio_map:
 
@@ -349,7 +349,7 @@ class NisaAccount:
         self.year_to_deposit_map[year] += amount
         self.principal += amount
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
 
         self.gain += self.investment_return_rate * (self.principal + self.gain)
 
@@ -458,10 +458,10 @@ class SimpleInvestmentManager:
 
     def advance_one_year(self, investment_returns: dict):
 
-        self.ordinary_investment_account.advance_one_year()
-        self.ideco_investment_account.advance_one_year()
-        self.old_nisa_account.advance_one_year(self.current_year)
-        self.nisa_account.advance_one_year()
+        self.ordinary_investment_account.advance_one_year(investment_returns)
+        self.ideco_investment_account.advance_one_year(investment_returns)
+        self.old_nisa_account.advance_one_year(investment_returns, self.current_year)
+        self.nisa_account.advance_one_year(investment_returns)
 
         self.current_year += 1
 

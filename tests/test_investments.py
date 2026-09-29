@@ -100,13 +100,13 @@ class TestOrdinaryInvestmentAccount:
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
 
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, 1000, rel_tol=1e-2)
         assert math.isclose(investment_account.gain, 100, rel_tol=1e-2)
         assert math.isclose(investment_account.portfolio_value, 1100, rel_tol=1e-2)
 
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, 1000, rel_tol=1e-2)
         assert math.isclose(investment_account.gain, 210, rel_tol=1e-2)
@@ -118,7 +118,7 @@ class TestOrdinaryInvestmentAccount:
         assert math.isclose(investment_account.gain, 210, rel_tol=1e-2)
         assert math.isclose(investment_account.portfolio_value, 2210, rel_tol=1e-2)
 
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, 2000, rel_tol=1e-2)
         assert math.isclose(investment_account.gain, 431, rel_tol=1e-2)
@@ -144,8 +144,8 @@ class TestOrdinaryInvestmentAccount:
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
 
-        investment_account.advance_one_year()
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
         assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
@@ -166,8 +166,8 @@ class TestOrdinaryInvestmentAccount:
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
 
-        investment_account.advance_one_year()
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
         assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
@@ -197,8 +197,8 @@ class TestOrdinaryInvestmentAccount:
             capital_gain_tax_rate=decimal.Decimal("0.2")
         )
 
-        investment_account.advance_one_year()
-        investment_account.advance_one_year()
+        investment_account.advance_one_year(investment_returns={})
+        investment_account.advance_one_year(investment_returns={})
 
         assert math.isclose(investment_account.principal, decimal.Decimal(1000), rel_tol=1e-2)
         assert math.isclose(investment_account.gain, decimal.Decimal(210), rel_tol=1e-2)
@@ -290,7 +290,7 @@ class TestOldNisaAccount:
             investment_return_rate=decimal.Decimal("0.1")
         )
 
-        nisa.advance_one_year(2025)
+        nisa.advance_one_year(investment_returns={}, year=2025)
 
         assert abs(nisa.year_to_portfolio_map[2020] - decimal.Decimal(110)) < decimal.Decimal("0.001")
         assert abs(nisa.year_to_portfolio_map[2021] - decimal.Decimal(55)) < decimal.Decimal("0.001")
@@ -306,7 +306,7 @@ class TestOldNisaAccount:
         )
 
         with pytest.raises(ValueError):
-            nisa.advance_one_year(2041)
+            nisa.advance_one_year(investment_returns={}, year=2041)
 
     def test_withdraw_for_invalid_year(self):
 
@@ -414,7 +414,7 @@ class TestNisaAccount:
             investment_return_rate=decimal.Decimal("0.1")
         )
 
-        nisa.advance_one_year()
+        nisa.advance_one_year(investment_returns={})
 
         assert nisa.principal == decimal.Decimal(100)
         assert nisa.gain == decimal.Decimal(10)
@@ -426,7 +426,7 @@ class TestNisaAccount:
         assert nisa.gain == decimal.Decimal(10)
         assert nisa.portfolio_value == decimal.Decimal(160)
 
-        nisa.advance_one_year()
+        nisa.advance_one_year(investment_returns={})
 
         assert nisa.principal == decimal.Decimal(150)
         assert nisa.gain == decimal.Decimal(26)
