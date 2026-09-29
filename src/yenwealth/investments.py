@@ -70,6 +70,7 @@ class Asset:
         self.principal += amount
 
 
+@typing.runtime_checkable
 @beartype.beartype
 class DepositStrategy(typing.Protocol):
 
@@ -83,7 +84,7 @@ class DepositStrategy(typing.Protocol):
 
 class ProportionalDepositStrategy(DepositStrategy):
 
-    def __init__(self, weights: dict):
+    def __init__(self, weights: dict[str, decimal.Decimal]):
 
         self.weights = weights
 
@@ -172,6 +173,41 @@ class OrdinaryInvestmentAccount:
 
         return (self.portfolio_value - (self.capital_gain_tax_rate * self.gain)) \
             .quantize(constants.YEN, decimal.ROUND_DOWN)
+
+
+@beartype.beartype
+class OrdinaryInvestmentAccountV2:
+
+    def __init__(
+        self,
+        asset_map: dict[str, Asset],
+        capital_gain_tax_rate: decimal.Decimal = decimal.Decimal("0.20325")
+    ):
+
+        self.capital_gain_tax_rate = capital_gain_tax_rate
+        self.asset_map = asset_map
+
+    @property
+    def portfolio_value(self) -> decimal.Decimal:
+        return decimal.Decimal(sum(asset.value for asset in self.asset_map.values()))
+
+    def deposit(self, amount: decimal.Decimal, strategy: DepositStrategy):
+
+        if amount < 0:
+            raise ValueError(f"Deposit amount should be non-negative, got {amount}")
+
+        allocations = strategy.allocate(
+            amount=amount,
+            assets=list(self.asset_map.keys())
+        )
+
+        for name, allocation in allocations.items():
+            self.asset_map[name].buy(allocation)
+
+    def advance_one_year(self, investment_returns: dict[str, decimal.Decimal]):
+
+        for name, asset in self.asset_map.items():
+            asset.advance_one_year(investment_returns[name])
 
 
 @beartype.beartype

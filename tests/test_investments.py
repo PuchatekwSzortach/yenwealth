@@ -255,6 +255,87 @@ class TestOrdinaryInvestmentAccount:
         assert investment_account.max_cash_withdrawal == decimal.Decimal(1168)
 
 
+class TestOrdinaryInvestmentAccountV2:
+
+    def test_portolio_value(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccountV2(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            }
+        )
+
+        assert decimal.Decimal(40) == account.portfolio_value
+
+    def test_deposit(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccountV2(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            }
+        )
+
+        strategy = yenwealth.investments.ProportionalDepositStrategy(
+            weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(3)}
+        )
+
+        account.deposit(amount=decimal.Decimal(10), strategy=strategy)
+
+        assert account.asset_map["VGT"].principal == decimal.Decimal("12.5")
+        assert account.asset_map["VOO"].principal == decimal.Decimal("27.5")
+
+    def test_advance_one_year(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccountV2(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            }
+        )
+
+        account.advance_one_year(
+            investment_returns={
+                "VGT": decimal.Decimal("0.2"),
+                "VOO": decimal.Decimal("-0.1")
+            }
+        )
+
+        assert account.asset_map["VGT"].gain == decimal.Decimal("6.5")
+        assert account.asset_map["VOO"].gain == decimal.Decimal(0)
+
+
 class TestIdecoInvestmentAccount:
 
     def test_withdrawing_pensions_without_initializing_it_first(self):
