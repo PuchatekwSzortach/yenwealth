@@ -387,7 +387,7 @@ class InvestmentManager(typing.Protocol):
     def after_tax_portfolio_value(self) -> decimal.Decimal:
         ...
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
         ...
 
     def deposit(self, amount: decimal.Decimal, age: int):
@@ -456,7 +456,7 @@ class SimpleInvestmentManager:
             self.old_nisa_account.portfolio_value + \
             self.nisa_account.portfolio_value
 
-    def advance_one_year(self):
+    def advance_one_year(self, investment_returns: dict):
 
         self.ordinary_investment_account.advance_one_year()
         self.ideco_investment_account.advance_one_year()
