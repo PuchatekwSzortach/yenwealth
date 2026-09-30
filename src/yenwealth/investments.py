@@ -186,16 +186,26 @@ class OrdinaryInvestmentAccount:
         for name, asset in self.asset_map.items():
             asset.advance_one_year(investment_returns[name])
 
-    def withdraw(self, desired_cash: decimal.Decimal, strategy: WithdrawStrategy):
+    def _get_asset_net_value(self, asset: Asset) -> decimal.Decimal:
+        return asset.value - (asset.gain * self.capital_gain_tax_rate)
 
-        asset_to_net_value_map = {
-            name: asset.value - (asset.gain * self.capital_gain_tax_rate)
+    @property
+    def _asset_to_net_value_map(self) -> dict[str, decimal.Decimal]:
+        return {
+            name: self._get_asset_net_value(asset)
             for name, asset in self.asset_map.items()
         }
 
+    def withdraw(self, desired_cash: decimal.Decimal, strategy: WithdrawStrategy):
+
+        if desired_cash > self.max_cash_withdrawal:
+            raise InsufficientFunds(
+                f"Withdrawal value {desired_cash} exceeds maximum cash withdrawal {self.max_cash_withdrawal}"
+            )
+
         net_cash_withdrawals = strategy.calculate_withdrawal_amounts(
             amount=desired_cash,
-            asset_map=asset_to_net_value_map
+            asset_map=self._asset_to_net_value_map
         )
 
         for name, net_sale in net_cash_withdrawals.items():
@@ -210,8 +220,7 @@ class OrdinaryInvestmentAccount:
     @property
     def max_cash_withdrawal(self) -> decimal.Decimal:
 
-        net_values = [asset.value - (asset.gain * self.capital_gain_tax_rate) for asset in self.asset_map.values()]
-
+        net_values = self._asset_to_net_value_map.values()
         return decimal.Decimal(sum(net_values)).quantize(constants.YEN, decimal.ROUND_DOWN)
 
 

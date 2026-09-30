@@ -256,6 +256,32 @@ class TestOrdinaryInvestmentAccount:
                 strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
             )
 
+    def test_withdraw_over_max_cash_withdrawal(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(10),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                ),
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(20),
+                    gain=decimal.Decimal(5),
+                    annual_management_cost_rate=decimal.Decimal("0.1")
+                )
+            }
+        )
+
+        with pytest.raises(yenwealth.investments.InsufficientFunds):
+
+            account.withdraw(
+                desired_cash=account.max_cash_withdrawal + decimal.Decimal("0.5"),
+                strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+            )
+
     def test_withdraw(self):
 
         account = yenwealth.investments.OrdinaryInvestmentAccount(
