@@ -186,13 +186,13 @@ class OrdinaryInvestmentAccount:
         for name, asset in self.asset_map.items():
             asset.advance_one_year(investment_returns[name])
 
-    def _get_asset_net_value(self, asset: Asset) -> decimal.Decimal:
+    def _get_net_asset_value(self, asset: Asset) -> decimal.Decimal:
         return asset.value - (asset.gain * self.capital_gain_tax_rate)
 
     @property
     def _asset_to_net_value_map(self) -> dict[str, decimal.Decimal]:
         return {
-            name: self._get_asset_net_value(asset)
+            name: self._get_net_asset_value(asset)
             for name, asset in self.asset_map.items()
         }
 
