@@ -86,6 +86,9 @@ class ProportionalDepositStrategy(DepositStrategy):
 
     def __init__(self, weights: dict[str, decimal.Decimal]):
 
+        if len(weights.keys()) == 0:
+            raise ValueError("At least one asset name must be provided")
+
         self.weights = weights
 
     def allocate(self, amount: decimal.Decimal, assets: list[str]) -> dict[str, decimal.Decimal]:
@@ -126,6 +129,10 @@ class WithdrawStrategy(typing.Protocol):
 class SequentialWithdrawStrategy(WithdrawStrategy):
 
     def __init__(self, withdraw_order: list[str]):
+
+        if len(withdraw_order) == 0:
+            raise ValueError("At least one asset name must be provided")
+
         self.withdraw_order = withdraw_order
 
     def calculate_withdrawal_amounts(

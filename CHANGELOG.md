@@ -1,5 +1,8 @@
 # Changelog
 
+### 0.4.2
+- improved - constructors for ProportionalDepositStrategy and SequentialWithdrawStrategy now validate that inputs are not empty
+
 ### 0.4.1
 - improved - improved error message for SequentialWithdrawStrategy.calculate_withdrawal_amounts if withdrawal over asset value is requested
 
