@@ -148,6 +148,20 @@ class TestSequentiallWithdrawStrategy:
                 }
             )
 
+    def test_raises_if_all_assets_are_from_which_strategy_should_drawe_are_insufficient(self):
+
+        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGT"])
+
+        with pytest.raises(yenwealth.investments.InsufficientFunds):
+
+            strategy.calculate_withdrawal_amounts(
+                decimal.Decimal(25),
+                {
+                    "VGG": decimal.Decimal(10),
+                    "VGT": decimal.Decimal(20)
+                }
+            )
+
 
 class TestOrdinaryInvestmentAccount:
 
