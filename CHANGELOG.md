@@ -1,5 +1,8 @@
 # Changelog
 
+### 0.4.1
+- improved - improved error message for SequentialWithdrawStrategy.calculate_withdrawal_amounts if withdrawal over asset value is requested
+
 ### 0.4.0
 - added - added Asset, DepositStrategy and WithdrawStrategy classes
 - updated - all account classes are now based on assets that can grow independently instead of lump principal and gain values
