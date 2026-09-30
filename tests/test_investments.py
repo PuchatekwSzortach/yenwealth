@@ -499,75 +499,112 @@ class TestIdecoInvestmentAccount:
 
 class TestOldNisaAccount:
 
+    @staticmethod
+    def asset_map(principal_vgt: int, principal_voo: int):
+        return {
+            "VGT": yenwealth.investments.Asset(
+                name="VGT",
+                principal=decimal.Decimal(principal_vgt),
+                gain=decimal.Decimal(0),
+                annual_management_cost_rate=decimal.Decimal(0)
+            ),
+            "VOO": yenwealth.investments.Asset(
+                name="VOO",
+                principal=decimal.Decimal(principal_voo),
+                gain=decimal.Decimal(0),
+                annual_management_cost_rate=decimal.Decimal(0)
+            )
+        }
+
     def test_advance_one_year(self):
 
         nisa = yenwealth.investments.OldNisaAccount(
-            year_to_portfolio_map={
-                2020: decimal.Decimal(100),
-                2021: decimal.Decimal(50)
-            },
-            investment_return_rate=decimal.Decimal("0.1")
+            year_to_asset_map={
+                2020: self.asset_map(principal_vgt=100, principal_voo=50),
+                2021: self.asset_map(principal_vgt=50, principal_voo=25)
+            }
         )
 
-        nisa.advance_one_year(investment_returns={}, year=2025)
+        nisa.advance_one_year(
+            investment_returns={
+                "VGT": decimal.Decimal("0.1"),
+                "VOO": decimal.Decimal("0.2")
+            },
+            year=2025
+        )
 
-        assert abs(nisa.year_to_portfolio_map[2020] - decimal.Decimal(110)) < decimal.Decimal("0.001")
-        assert abs(nisa.year_to_portfolio_map[2021] - decimal.Decimal(55)) < decimal.Decimal("0.001")
+        assert nisa.year_to_asset_map[2020]["VGT"].value == decimal.Decimal(110)
+        assert nisa.year_to_asset_map[2020]["VOO"].value == decimal.Decimal(60)
+        assert nisa.year_to_asset_map[2021]["VGT"].value == decimal.Decimal(55)
+        assert nisa.year_to_asset_map[2021]["VOO"].value == decimal.Decimal(30)
 
     def test_advance_one_year_over_twenty_years_for_any_investment(self):
 
         nisa = yenwealth.investments.OldNisaAccount(
-            year_to_portfolio_map={
-                2020: decimal.Decimal(100),
-                2021: decimal.Decimal(50)
-            },
-            investment_return_rate=decimal.Decimal("0.1")
+            year_to_asset_map={
+                2020: self.asset_map(100, 50),
+                2021: self.asset_map(50, 25)
+            }
         )
 
         with pytest.raises(ValueError):
-            nisa.advance_one_year(investment_returns={}, year=2041)
+            nisa.advance_one_year(
+                investment_returns={"VGT": decimal.Decimal(0), "VOO": decimal.Decimal(0)},
+                year=2041
+            )
 
     def test_withdraw_for_invalid_year(self):
 
         nisa = yenwealth.investments.OldNisaAccount(
-            year_to_portfolio_map={
-                2020: decimal.Decimal(100),
-                2021: decimal.Decimal(50)
-            },
-            investment_return_rate=decimal.Decimal("0.1")
+            year_to_asset_map={
+                2020: self.asset_map(100, 50),
+                2021: self.asset_map(50, 25)
+            }
         )
 
         with pytest.raises(KeyError):
-            nisa.withdraw_for_year(portfolio_year=2022, desired_cash=decimal.Decimal(10))
+            nisa.withdraw_for_year(
+                portfolio_year=2022,
+                desired_cash=decimal.Decimal(10),
+                strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+            )
 
     def test_valid_withdraw_for_year(self):
 
         nisa = yenwealth.investments.OldNisaAccount(
-            year_to_portfolio_map={
-                2020: decimal.Decimal(100),
-                2021: decimal.Decimal(50)
-            },
-            investment_return_rate=decimal.Decimal("0.1")
+            year_to_asset_map={
+                2020: self.asset_map(100, 50),
+                2021: self.asset_map(50, 25)
+            }
         )
 
-        nisa.withdraw_for_year(portfolio_year=2020, desired_cash=decimal.Decimal(10))
+        nisa.withdraw_for_year(
+            portfolio_year=2020,
+            desired_cash=decimal.Decimal(10),
+            strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+        )
 
-        assert nisa.year_to_portfolio_map[2020] == decimal.Decimal(90)
+        assert nisa.year_to_asset_map[2020]["VGT"].value == decimal.Decimal(90)
+        assert nisa.year_to_asset_map[2020]["VOO"].value == decimal.Decimal(50)
 
     def test_withdraw(self):
 
         nisa = yenwealth.investments.OldNisaAccount(
-            year_to_portfolio_map={
-                2020: decimal.Decimal(100),
-                2021: decimal.Decimal(50)
-            },
-            investment_return_rate=decimal.Decimal("0.1")
+            year_to_asset_map={
+                2020: self.asset_map(100, 50),
+                2021: self.asset_map(50, 25)
+            }
         )
 
-        nisa.withdraw(desired_cash=decimal.Decimal(120))
+        nisa.withdraw(
+            desired_cash=decimal.Decimal(120),
+            strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+        )
 
-        assert nisa.year_to_portfolio_map[2020] == decimal.Decimal(0)
-        assert nisa.year_to_portfolio_map[2021] == decimal.Decimal(30)
+        assert nisa.year_to_asset_map[2020]["VGT"].value == decimal.Decimal(0)
+        assert nisa.year_to_asset_map[2020]["VOO"].value == decimal.Decimal(30)
+        assert nisa.year_to_asset_map[2021]["VGT"].value == decimal.Decimal(50)
+        assert nisa.year_to_asset_map[2021]["VOO"].value == decimal.Decimal(25)
 
 
 class TestNisaAccount:
@@ -720,8 +757,7 @@ class TestInvestmentManager:
 
         # 3. Old NISA Account: empty year map
         old_nisa = yenwealth.investments.OldNisaAccount(
-            year_to_portfolio_map={},
-            investment_return_rate=decimal.Decimal("0.05")
+            year_to_asset_map={}
         )
 
         # 4. NISA Account: 0 principal, 0 gain
@@ -740,6 +776,7 @@ class TestInvestmentManager:
             ideco_account_deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
                 weights={"VOO": decimal.Decimal(1)}),
             ideco_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"]),
+            old_nisa_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"]),
             ordinary_account_deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
                 weights={"VOO": decimal.Decimal(1)}),
             ordinary_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
@@ -769,7 +806,16 @@ class TestInvestmentManager:
 
         # Setup initial balances directly
         investment_manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
-        investment_manager.old_nisa_account.year_to_portfolio_map = {2010: decimal.Decimal(500_000)}
+        investment_manager.old_nisa_account.year_to_asset_map = {
+            2010: {
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(500_000),
+                    gain=decimal.Decimal(0),
+                    annual_management_cost_rate=decimal.Decimal(0)
+                )
+            }
+        }
         investment_manager.nisa_account.principal = decimal.Decimal(2_000_000)
 
         # Withdraw 2,000,000 Yen
@@ -784,13 +830,22 @@ class TestInvestmentManager:
 
         # Current year = start_year (2024) + age (50) - start_age (30) = 2044
         # 20 years prior = 2024. Populate Old NISA portfolio for 2024
-        investment_manager.old_nisa_account.year_to_portfolio_map = {2024: decimal.Decimal(1_000_000)}
+        investment_manager.old_nisa_account.year_to_asset_map = {
+            2024: {
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(1_000_000),
+                    gain=decimal.Decimal(0),
+                    annual_management_cost_rate=decimal.Decimal(0)
+                )
+            }
+        }
         investment_manager.current_year = 2044
 
         investment_manager.optimize_investments()
 
         # 2024 Old NISA portfolio should be removed and moved into NISA Account
-        assert 2024 not in investment_manager.old_nisa_account.year_to_portfolio_map
+        assert 2024 not in investment_manager.old_nisa_account.year_to_asset_map
         assert investment_manager.nisa_account.principal == decimal.Decimal(1_000_000)
 
     def test_optimize_investments_ideco_lump_sum_and_nisa_topup(self, investment_manager):

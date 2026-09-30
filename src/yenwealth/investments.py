@@ -344,39 +344,52 @@ class OldNisaAccount:
     from when they were made.
     """
 
-    def __init__(self, year_to_portfolio_map: dict[int, decimal.Decimal], investment_return_rate: decimal.Decimal):
+    def __init__(self, year_to_asset_map: dict[int, dict[str, Asset]]):
 
-        self.year_to_portfolio_map = copy.deepcopy(year_to_portfolio_map)
-        self.investment_return_rate = investment_return_rate
+        self.year_to_asset_map = copy.deepcopy(year_to_asset_map)
 
-    def advance_one_year(self, investment_returns: dict, year: int):
+    def advance_one_year(self, investment_returns: dict[str, decimal.Decimal], year: int):
 
-        for investment_year in self.year_to_portfolio_map:
+        for investment_year, asset_map in self.year_to_asset_map.items():
 
             if investment_year + 20 < year:
                 raise ValueError(f"nisa investment for year {investment_year} must be liquidated")
 
-            self.year_to_portfolio_map[investment_year] = \
-                self.year_to_portfolio_map[investment_year] * (1 + self.investment_return_rate)
+            for name, asset in asset_map.items():
+                asset.advance_one_year(investment_returns[name])
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
 
-        return decimal.Decimal(sum(self.year_to_portfolio_map.values()))
+        return decimal.Decimal(
+            sum(asset.value for asset_map in self.year_to_asset_map.values() for asset in asset_map.values())
+        )
 
-    def withdraw_for_year(self, portfolio_year: int, desired_cash: decimal.Decimal):
+    def withdraw_for_year(
+        self,
+        portfolio_year: int,
+        desired_cash: decimal.Decimal,
+        strategy: WithdrawStrategy
+    ):
         """
         Withdraw from portfolio established on portfolio_year
         """
 
-        portfolio_value = self.year_to_portfolio_map[portfolio_year]
+        asset_map = self.year_to_asset_map[portfolio_year]
+        portfolio_value = decimal.Decimal(sum(asset.value for asset in asset_map.values()))
 
         if portfolio_value < desired_cash:
             raise ValueError(f"Portfolio value for {portfolio_year} is not large enough")
 
-        self.year_to_portfolio_map[portfolio_year] -= desired_cash
+        withdrawals = strategy.calculate_withdrawal_amounts(
+            amount=desired_cash,
+            asset_map={name: asset.value for name, asset in asset_map.items()}
+        )
 
-    def withdraw(self, desired_cash: decimal.Decimal):
+        for name, withdrawal in withdrawals.items():
+            asset_map[name].sell(withdrawal)
+
+    def withdraw(self, desired_cash: decimal.Decimal, strategy: WithdrawStrategy):
         """
         Withdraw from portfolio in order of oldest to newest
         """
@@ -391,11 +404,18 @@ class OldNisaAccount:
 
         total_withdrawal = decimal.Decimal(0)
 
-        for investment_year in sorted(self.year_to_portfolio_map.keys()):
+        for investment_year in sorted(self.year_to_asset_map.keys()):
 
-            withdrawal_from_year = min(desired_cash - total_withdrawal, self.year_to_portfolio_map[investment_year])
+            year_portfolio_value = decimal.Decimal(
+                sum(asset.value for asset in self.year_to_asset_map[investment_year].values())
+            )
+            withdrawal_from_year = min(desired_cash - total_withdrawal, year_portfolio_value)
 
-            self.withdraw_for_year(portfolio_year=investment_year, desired_cash=withdrawal_from_year)
+            self.withdraw_for_year(
+                portfolio_year=investment_year,
+                desired_cash=withdrawal_from_year,
+                strategy=strategy
+            )
             total_withdrawal += withdrawal_from_year
 
             if total_withdrawal == desired_cash:
@@ -483,6 +503,7 @@ class InvestmentPolicy(pydantic.BaseModel):
     ideco: IdecoPolicy
     ideco_account_deposit_strategy: DepositStrategy
     ideco_account_withdraw_strategy: WithdrawStrategy
+    old_nisa_account_withdraw_strategy: WithdrawStrategy
     ordinary_account_deposit_strategy: DepositStrategy
     ordinary_account_withdraw_strategy: WithdrawStrategy
 
@@ -650,7 +671,10 @@ class SimpleInvestmentManager:
 
         if withdrawal_from_old_nisa > 0:
 
-            self.old_nisa_account.withdraw(withdrawal_from_old_nisa)
+            self.old_nisa_account.withdraw(
+                withdrawal_from_old_nisa,
+                self.investment_policy.old_nisa_account_withdraw_strategy
+            )
             total_cash_withdrawn += withdrawal_from_old_nisa
 
         # Establish how much to withdraw from NISA
@@ -674,9 +698,10 @@ class SimpleInvestmentManager:
         """
 
         # Check if any old nisa account portfolio has to be liquidated
-        if (self.current_year - 20) in self.old_nisa_account.year_to_portfolio_map:
+        if (self.current_year - 20) in self.old_nisa_account.year_to_asset_map:
 
-            portfolio_value = self.old_nisa_account.year_to_portfolio_map.pop(self.current_year - 20)
+            asset_map = self.old_nisa_account.year_to_asset_map.pop(self.current_year - 20)
+            portfolio_value = decimal.Decimal(sum(asset.value for asset in asset_map.values()))
 
             self.ordinary_investment_account.deposit(
                 portfolio_value,
