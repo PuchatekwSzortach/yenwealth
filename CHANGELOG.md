@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.4.0
+- added - added Asset, DepositStrategy and WithdrawStrategy classes
+- updated - all account classes are now based on assets that can grow independently instead of lump principal and gain values
+- updated - InvestmentManager and FinancesSimulator  now accept simulated growth values for invididual assets and grow assets over time based on these values
+- updated - FinancesSimulator.run_simulation now returns pandas.DataFrame with simulation result, including in case when accounts run out of money before simulation end
+
 ### 0.3.0
 - updated - OrdinaryInvestmentAccount's capital_gain_tax_rate now has a default value
 - improved - IdecoInvestmentAccount now correctly calculates max allowed tax free lump withdrawal amount based on when contributions to the account began
