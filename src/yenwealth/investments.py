@@ -219,13 +219,12 @@ class OrdinaryInvestmentAccount:
 class IdecoInvestmentAccount:
 
     def __init__(
-            self,
-            portfolio_value: decimal.Decimal,
-            investment_return_rate: decimal.Decimal,
-            contribution_start_year: int):
+        self,
+        asset_map: dict[str, Asset],
+        contribution_start_year: int
+    ):
 
-        self.investment_return_rate = investment_return_rate
-        self.portfolio_value = portfolio_value
+        self.asset_map = asset_map
         self.contribution_start_year = contribution_start_year
 
         self.max_annual_contribution = decimal.Decimal("0.276") * constants.MILLION
@@ -238,7 +237,11 @@ class IdecoInvestmentAccount:
         self.maybe_pension_schema_start_age: returns.maybe.Maybe[int] = returns.maybe.Nothing
         self.pension_payout_ages: list[int] = []
 
-    def deposit(self, amount: decimal.Decimal, age: int):
+    @property
+    def portfolio_value(self) -> decimal.Decimal:
+        return decimal.Decimal(sum(asset.value for asset in self.asset_map.values()))
+
+    def deposit(self, amount: decimal.Decimal, age: int, strategy: DepositStrategy):
 
         if age >= self.max_deposit_age:
             raise ValueError(f"Deposit age {age} exceeds maximum allowed deposit age of {self.max_deposit_age}")
@@ -250,11 +253,18 @@ class IdecoInvestmentAccount:
             raise ValueError(
                 f"Deposit amount {amount} exceeds maximum allowed contribution of {self.max_annual_contribution}")
 
-        self.portfolio_value += amount
+        allocations = strategy.allocate(
+            amount=amount,
+            assets=list(self.asset_map.keys())
+        )
 
-    def advance_one_year(self, investment_returns: dict):
+        for name, allocation in allocations.items():
+            self.asset_map[name].buy(allocation)
 
-        self.portfolio_value = self.portfolio_value * (1 + self.investment_return_rate)
+    def advance_one_year(self, investment_returns: dict[str, decimal.Decimal]):
+
+        for name, asset in self.asset_map.items():
+            asset.advance_one_year(investment_returns[name])
 
     def start_pension_scheme(self, start_age: int, period_in_years: int):
 
@@ -265,7 +275,7 @@ class IdecoInvestmentAccount:
         self.maybe_pension_period_in_years = returns.maybe.Some(period_in_years)
         self.maybe_pension_schema_start_age = returns.maybe.Some(start_age)
 
-    def withdraw_pension(self, age: int) -> decimal.Decimal:
+    def withdraw_pension(self, age: int, strategy: WithdrawStrategy) -> decimal.Decimal:
 
         if self.has_started_drawing_pension is False:
             raise ValueError("pension scheme not initialized")
@@ -286,13 +296,24 @@ class IdecoInvestmentAccount:
         if age > pension_schema_start_age + pension_period_in_years:
             raise ValueError("iDeCo pension scheme finished")
 
-        withdrawal_proportion = 1 / (pension_period_in_years - len(self.pension_payout_ages))
+        withdrawal_proportion = decimal.Decimal(1) / decimal.Decimal(
+            pension_period_in_years - len(self.pension_payout_ages))
 
-        withdrawal = self.portfolio_value * decimal.Decimal(withdrawal_proportion)
-        self.portfolio_value -= withdrawal
+        withdrawal = self.portfolio_value * withdrawal_proportion
+        self._withdraw(withdrawal, strategy)
         self.pension_payout_ages.append(age)
 
         return withdrawal
+
+    def _withdraw(self, amount: decimal.Decimal, strategy: WithdrawStrategy):
+
+        withdrawals = strategy.calculate_withdrawal_amounts(
+            amount=amount,
+            asset_map={name: asset.value for name, asset in self.asset_map.items()}
+        )
+
+        for name, withdrawal in withdrawals.items():
+            self.asset_map[name].sell(withdrawal)
 
     def get_max_allowed_tax_free_lump_withdrawal_amount(self, year: int) -> decimal.Decimal:
 
@@ -306,13 +327,13 @@ class IdecoInvestmentAccount:
             (decimal.Decimal(400_000) * min(years_since_account_started, 20)) + \
             (decimal.Decimal(700_000) * max(years_since_account_started - 20, 0))
 
-    def withdraw_tax_free_lump_sum(self, year: int) -> decimal.Decimal:
+    def withdraw_tax_free_lump_sum(self, year: int, strategy: WithdrawStrategy) -> decimal.Decimal:
 
         if year < self.contribution_start_year:
             raise ValueError(f"Year {year} has to be larger than account start year {self.contribution_start_year}")
 
         amount_withdrawn = min(self.portfolio_value, self.get_max_allowed_tax_free_lump_withdrawal_amount(year))
-        self.portfolio_value -= amount_withdrawn
+        self._withdraw(amount_withdrawn, strategy)
         return amount_withdrawn
 
 
@@ -460,6 +481,8 @@ class InvestmentPolicy(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
 
     ideco: IdecoPolicy
+    ideco_account_deposit_strategy: DepositStrategy
+    ideco_account_withdraw_strategy: WithdrawStrategy
     ordinary_account_deposit_strategy: DepositStrategy
     ordinary_account_withdraw_strategy: WithdrawStrategy
 
@@ -565,7 +588,13 @@ class SimpleInvestmentManager:
         if age < self.ideco_investment_account.max_deposit_age:
 
             amount_deposited_to_ideco = min(amount, self.ideco_investment_account.max_annual_contribution)
-            self.ideco_investment_account.deposit(amount=amount_deposited_to_ideco, age=age)
+
+            self.ideco_investment_account.deposit(
+                amount=amount_deposited_to_ideco,
+                age=age,
+                strategy=self.investment_policy.ideco_account_deposit_strategy
+            )
+
             amount -= amount_deposited_to_ideco
 
             LOGGER.debug(
@@ -661,7 +690,10 @@ class SimpleInvestmentManager:
         # Check if we should do lump withdrawal from iDeCo
         if self._current_age == self.investment_policy.ideco.withdrawal_start_age:
 
-            tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(self.current_year)
+            tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(
+                self.current_year,
+                self.investment_policy.ideco_account_withdraw_strategy
+            )
 
             self.ordinary_investment_account.deposit(
                 tax_free_lump_sum,
