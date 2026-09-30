@@ -22,7 +22,7 @@ class EconomicData:
 
         Args:
             return_on_assets_over_time (pandas.DataFrame): dataframe with return over time on assets.
-            Column names correspend to securities.
+            Column names correspond to securities.
             inflation_over_time (pandas.DataFrame): dataframe with inflation over time.
 
         Raises:

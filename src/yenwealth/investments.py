@@ -144,7 +144,7 @@ class SequentialWithdrawStrategy(WithdrawStrategy):
         target_asset_map = {name: value for (name, value) in asset_map.items() if name in set(self.withdraw_order)}
 
         if sum(target_asset_map.values()) < amount:
-            raise InsufficientFunds("Insufficient funds among targt assets to calculate withdrawal plan")
+            raise InsufficientFunds("Insufficient funds among target assets to calculate withdrawal plan")
 
         remaining = amount
         withdrawals = {}
@@ -580,7 +580,7 @@ class SimpleInvestmentManager:
     """
     Investment manager with a strategy that:
     - prioritizes depositing into NISA before ordinary account
-    - prioritizes withdrawing fron ordinary account before NISA
+    - prioritizes withdrawing from ordinary account before NISA
     - withdraws half iDeCO funds at pension start time,
     """
 

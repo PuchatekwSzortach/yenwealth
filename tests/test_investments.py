@@ -324,7 +324,7 @@ class TestOrdinaryInvestmentAccount:
         )
 
         # We would expect that with capital gain tax rate of 0.5, VGT asset can provide 12.5 units
-        # (10 untaxed from prinicipal, then 5 gross (2.5 net) from gain)
+        # (10 untaxed from principal, then 5 gross (2.5 net) from gain)
         # Then VOO needs to provide net amount of 31.5 units.
         # VOO has 80% gain and we need to pay 50% capital gain tax on it, so net cash per 1 unit sold should be
         # 1 - (0.8 * 0.5) = 0.6.
@@ -691,7 +691,7 @@ class TestNisaAccount:
 
         with pytest.raises(ValueError):
 
-            # Over limit for targer year
+            # Over limit for target year
             nisa.deposit(amount=decimal.Decimal(2_000_000), year=2025, strategy=self.deposit_strategy())
 
     def test_deposit(self):
