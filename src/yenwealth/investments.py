@@ -134,6 +134,9 @@ class SequentialWithdrawStrategy(WithdrawStrategy):
         asset_map: dict[str, decimal.Decimal],
     ) -> dict[str, decimal.Decimal]:
 
+        if sum(asset_map.values()) < amount:
+            raise InsufficientFunds("Insufficient funds among assets to calculate withdrawal plan")
+
         remaining = amount
         withdrawals = {}
 
@@ -149,7 +152,7 @@ class SequentialWithdrawStrategy(WithdrawStrategy):
             if remaining == 0:
                 return withdrawals
 
-        raise InsufficientFunds
+        raise RuntimeError("Unexpected code path")
 
 
 @beartype.beartype
