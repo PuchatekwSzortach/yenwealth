@@ -398,7 +398,7 @@ class OldNisaAccount:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
 
         if desired_cash > self.portfolio_value:
-            raise ValueError(
+            raise InsufficientFunds(
                 f"Withdrawal value {desired_cash} exceeds portfolio value {self.portfolio_value}"
             )
 
@@ -430,31 +430,33 @@ class NisaAccount:
 
     def __init__(
         self,
-        principal: decimal.Decimal,
-        gain: decimal.Decimal,
-        investment_return_rate: decimal.Decimal
+        asset_map: dict[str, Asset]
     ):
 
         self.annual_deposit_limit = decimal.Decimal("3.6") * constants.MILLION
         self.total_deposit_limit = decimal.Decimal(18) * constants.MILLION
+        self.asset_map = asset_map
 
-        if principal > self.total_deposit_limit:
-            raise ValueError(f"Principal {principal} exceeds total deposit limit of {self.total_deposit_limit}")
-
-        self.principal = principal
-        self.gain = gain
-        self.investment_return_rate = investment_return_rate
+        if self.principal > self.total_deposit_limit:
+            raise ValueError(f"Principal {self.principal} exceeds total deposit limit of {self.total_deposit_limit}")
 
         self.year_to_deposit_map = collections.defaultdict(decimal.Decimal)
 
     @property
-    def portfolio_value(self) -> decimal.Decimal:
-        return self.principal + self.gain
+    def principal(self) -> decimal.Decimal:
+        return decimal.Decimal(sum(asset.principal for asset in self.asset_map.values()))
 
-    def deposit(self, amount: decimal.Decimal, year: int):
+    @property
+    def portfolio_value(self) -> decimal.Decimal:
+        return decimal.Decimal(sum(asset.value for asset in self.asset_map.values()))
+
+    def deposit(self, amount: decimal.Decimal, year: int, strategy: DepositStrategy):
 
         if amount < 0:
             raise ValueError(f"Deposit amount should be non-negative, got {amount}")
+
+        if amount == 0:
+            return
 
         if self.principal + amount > self.total_deposit_limit:
 
@@ -470,24 +472,36 @@ class NisaAccount:
             )
             raise ValueError(message)
 
+        allocations = strategy.allocate(
+            amount=amount,
+            assets=list(self.asset_map.keys())
+        )
+
+        for name, allocation in allocations.items():
+            self.asset_map[name].buy(allocation)
+
         self.year_to_deposit_map[year] += amount
-        self.principal += amount
 
-    def advance_one_year(self, investment_returns: dict):
+    def advance_one_year(self, investment_returns: dict[str, decimal.Decimal]):
 
-        self.gain += self.investment_return_rate * (self.principal + self.gain)
+        for name, asset in self.asset_map.items():
+            asset.advance_one_year(investment_returns[name])
 
-    def withdraw(self, desired_amount: decimal.Decimal):
+    def withdraw(self, desired_cash: decimal.Decimal, strategy: WithdrawStrategy):
 
-        if desired_amount > self.portfolio_value:
-            raise ValueError(f"Desired amount {desired_amount} exceeds portfolio value {self.portfolio_value}")
+        if desired_cash < 0:
+            raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
 
-        gain_ratio = self.portfolio_value / self.principal
+        if desired_cash > self.portfolio_value:
+            raise InsufficientFunds(f"Withdrawal value {desired_cash} exceeds portfolio value {self.portfolio_value}")
 
-        principal_withdrawn = desired_amount / gain_ratio
+        withdrawals = strategy.calculate_withdrawal_amounts(
+            amount=desired_cash,
+            asset_map={name: asset.value for name, asset in self.asset_map.items()}
+        )
 
-        self.principal -= principal_withdrawn
-        self.gain -= desired_amount - principal_withdrawn
+        for name, withdrawal in withdrawals.items():
+            self.asset_map[name].sell(withdrawal)
 
 
 class IdecoPolicy(pydantic.BaseModel):
@@ -504,6 +518,8 @@ class InvestmentPolicy(pydantic.BaseModel):
     ideco_account_deposit_strategy: DepositStrategy
     ideco_account_withdraw_strategy: WithdrawStrategy
     old_nisa_account_withdraw_strategy: WithdrawStrategy
+    nisa_account_deposit_strategy: DepositStrategy
+    nisa_account_withdraw_strategy: WithdrawStrategy
     ordinary_account_deposit_strategy: DepositStrategy
     ordinary_account_withdraw_strategy: WithdrawStrategy
 
@@ -629,7 +645,11 @@ class SimpleInvestmentManager:
                 amount
             )
 
-            self.nisa_account.deposit(amount_deposited_to_nisa, self.current_year)
+            self.nisa_account.deposit(
+                amount_deposited_to_nisa,
+                self.current_year,
+                self.investment_policy.nisa_account_deposit_strategy
+            )
             amount -= amount_deposited_to_nisa
 
             LOGGER.debug(
@@ -685,7 +705,10 @@ class SimpleInvestmentManager:
 
         if withdrawal_from_nisa > 0:
 
-            self.nisa_account.withdraw(withdrawal_from_nisa)
+            self.nisa_account.withdraw(
+                withdrawal_from_nisa,
+                self.investment_policy.nisa_account_withdraw_strategy
+            )
             total_cash_withdrawn += withdrawal_from_nisa
 
         if total_cash_withdrawn < desired_cash:
@@ -740,7 +763,11 @@ class SimpleInvestmentManager:
                 nisa_deposit,
                 self.investment_policy.ordinary_account_withdraw_strategy)
 
-            self.nisa_account.deposit(nisa_deposit, self.current_year)
+            self.nisa_account.deposit(
+                nisa_deposit,
+                self.current_year,
+                self.investment_policy.nisa_account_deposit_strategy
+            )
 
             LOGGER.debug(
                 f"Moved {utilities.format_million_yen(nisa_deposit)} "
