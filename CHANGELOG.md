@@ -1,12 +1,16 @@
 # Changelog
 
+### 0.4.2
+- improved - constructors for ProportionalDepositStrategy and SequentialWithdrawStrategy now validate that inputs are not empty
+- improved - SequentialWithdrawStrategy.calculate_withdrawal_amounts now validates that sufficient funds are available within target assets to satisfy withdrawal request
+
 ### 0.4.1
 - improved - improved error message for SequentialWithdrawStrategy.calculate_withdrawal_amounts if withdrawal over asset value is requested
 
 ### 0.4.0
 - added - added Asset, DepositStrategy and WithdrawStrategy classes
 - updated - all account classes are now based on assets that can grow independently instead of lump principal and gain values
-- updated - InvestmentManager and FinancesSimulator  now accept simulated growth values for invididual assets and grow assets over time based on these values
+- updated - InvestmentManager and FinancesSimulator  now accept simulated growth values for individual assets and grow assets over time based on these values
 - updated - FinancesSimulator.run_simulation now returns pandas.DataFrame with simulation result, including in case when accounts run out of money before simulation end
 
 ### 0.3.0

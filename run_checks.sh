@@ -6,3 +6,4 @@ pycodestyle ./src ./tests
 pytest
 ruff check .
 pyright
+codespell .

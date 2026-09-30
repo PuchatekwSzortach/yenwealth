@@ -86,6 +86,9 @@ class ProportionalDepositStrategy(DepositStrategy):
 
     def __init__(self, weights: dict[str, decimal.Decimal]):
 
+        if len(weights.keys()) == 0:
+            raise ValueError("At least one asset name must be provided")
+
         self.weights = weights
 
     def allocate(self, amount: decimal.Decimal, assets: list[str]) -> dict[str, decimal.Decimal]:
@@ -126,6 +129,10 @@ class WithdrawStrategy(typing.Protocol):
 class SequentialWithdrawStrategy(WithdrawStrategy):
 
     def __init__(self, withdraw_order: list[str]):
+
+        if len(withdraw_order) == 0:
+            raise ValueError("At least one asset name must be provided")
+
         self.withdraw_order = withdraw_order
 
     def calculate_withdrawal_amounts(
@@ -134,15 +141,17 @@ class SequentialWithdrawStrategy(WithdrawStrategy):
         asset_map: dict[str, decimal.Decimal],
     ) -> dict[str, decimal.Decimal]:
 
-        if sum(asset_map.values()) < amount:
-            raise InsufficientFunds("Insufficient funds among assets to calculate withdrawal plan")
+        target_asset_map = {name: value for (name, value) in asset_map.items() if name in set(self.withdraw_order)}
+
+        if sum(target_asset_map.values()) < amount:
+            raise InsufficientFunds("Insufficient funds among target assets to calculate withdrawal plan")
 
         remaining = amount
         withdrawals = {}
 
         for asset_name in self.withdraw_order:
 
-            withdrawal = min(remaining, asset_map[asset_name])
+            withdrawal = min(remaining, target_asset_map[asset_name])
 
             if withdrawal > 0:
                 withdrawals[asset_name] = withdrawal
@@ -571,7 +580,7 @@ class SimpleInvestmentManager:
     """
     Investment manager with a strategy that:
     - prioritizes depositing into NISA before ordinary account
-    - prioritizes withdrawing fron ordinary account before NISA
+    - prioritizes withdrawing from ordinary account before NISA
     - withdraws half iDeCO funds at pension start time,
     """
 
