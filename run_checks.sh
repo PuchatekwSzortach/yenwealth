@@ -7,3 +7,5 @@ pytest
 ruff check .
 pyright
 codespell .
+
+python examples/simple_simulation.py
