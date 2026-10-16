@@ -10,7 +10,6 @@ import pandas
 
 import yenwealth.investments
 import yenwealth.simulations
-import yenwealth.utilities
 
 
 def main():
