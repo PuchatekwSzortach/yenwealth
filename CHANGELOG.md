@@ -1,5 +1,8 @@
 # Changelog
 
+### 0.4.3
+- improved - added examples/simple_simulation.py
+
 ### 0.4.2
 - improved - constructors for ProportionalDepositStrategy and SequentialWithdrawStrategy now validate that inputs are not empty
 - improved - SequentialWithdrawStrategy.calculate_withdrawal_amounts now validates that sufficient funds are available within target assets to satisfy withdrawal request
