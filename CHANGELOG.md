@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.4.4
+- improved - Asset.sell now throws InsufficientFunds instead of ValueError if not enough assets exist
+- improved - Asset.portfolio_value now rounds down to nearest yen. This prevents a lot of fractional errors down the line
+
 ### 0.4.3
 - improved - added examples/simple_simulation.py
 
