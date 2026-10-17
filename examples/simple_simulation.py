@@ -52,7 +52,7 @@ def main():
     inputs = yenwealth.simulations.FinancesSimulatorInputs(
         annual_costs_callable=lambda age: decimal.Decimal(4_000_000),
         earned_annual_income_callable=
-        lambda age: decimal.Decimal(5_000_000) if age < 65 else decimal.Decimal(3_000_000),
+        lambda age: decimal.Decimal(5_000_000) if age < 65 else decimal.Decimal(2_000_000),
         investment_manager=yenwealth.investments.SimpleInvestmentManager(
             ordinary_investment_account=yenwealth.investments.OrdinaryInvestmentAccount(
                 asset_map={

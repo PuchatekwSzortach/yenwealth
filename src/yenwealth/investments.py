@@ -38,7 +38,7 @@ class Asset:
 
     @property
     def value(self) -> decimal.Decimal:
-        return self.principal + self.gain
+        return (self.principal + self.gain).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def advance_one_year(self, change_rate: decimal.Decimal):
 
@@ -50,7 +50,7 @@ class Asset:
             raise ValueError(f"amount value should be non-negative, got {amount}")
 
         if amount > self.value:
-            raise ValueError(
+            raise InsufficientFunds(
                 f"amount value {amount} exceeds current value {self.value}"
             )
 
@@ -103,7 +103,7 @@ class ProportionalDepositStrategy(DepositStrategy):
             for asset in assets
         }
 
-        total_weight = sum(weights.values())
+        total_weight = sum(weights.values(), decimal.Decimal(0))
 
         if total_weight <= 0:
             raise ValueError("Total weight must be positive")
@@ -143,8 +143,16 @@ class SequentialWithdrawStrategy(WithdrawStrategy):
 
         target_asset_map = {name: value for (name, value) in asset_map.items() if name in set(self.withdraw_order)}
 
-        if sum(target_asset_map.values()) < amount:
-            raise InsufficientFunds("Insufficient funds among target assets to calculate withdrawal plan")
+        asset_value = sum(target_asset_map.values(), decimal.Decimal(0)).quantize(constants.YEN, decimal.ROUND_DOWN)
+
+        if asset_value < amount:
+
+            message = (
+                f"Insufficient funds {asset_value} among target assets to calculate "
+                f"withdrawal plan for amount {amount}."
+            )
+
+            raise InsufficientFunds(message)
 
         remaining = amount
         withdrawals = {}
@@ -178,7 +186,9 @@ class OrdinaryInvestmentAccount:
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
-        return decimal.Decimal(sum(asset.value for asset in self.asset_map.values()))
+        return decimal.Decimal(
+            sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
+        ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def deposit(self, amount: decimal.Decimal, strategy: DepositStrategy):
 
@@ -233,7 +243,7 @@ class OrdinaryInvestmentAccount:
     def max_cash_withdrawal(self) -> decimal.Decimal:
 
         net_values = self._asset_to_net_value_map.values()
-        return decimal.Decimal(sum(net_values)).quantize(constants.YEN, decimal.ROUND_DOWN)
+        return decimal.Decimal(sum(net_values, decimal.Decimal(0))).quantize(constants.YEN, decimal.ROUND_DOWN)
 
 
 @beartype.beartype
@@ -260,7 +270,9 @@ class IdecoInvestmentAccount:
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
-        return decimal.Decimal(sum(asset.value for asset in self.asset_map.values()))
+        return decimal.Decimal(
+            sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
+        ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def deposit(self, amount: decimal.Decimal, age: int, strategy: DepositStrategy):
 
@@ -383,8 +395,11 @@ class OldNisaAccount:
     def portfolio_value(self) -> decimal.Decimal:
 
         return decimal.Decimal(
-            sum(asset.value for asset_map in self.year_to_asset_map.values() for asset in asset_map.values())
-        )
+            sum(
+                (asset.value for asset_map in self.year_to_asset_map.values() for asset in asset_map.values()),
+                decimal.Decimal(0)
+            )
+        ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def withdraw_for_year(
         self,
@@ -397,7 +412,7 @@ class OldNisaAccount:
         """
 
         asset_map = self.year_to_asset_map[portfolio_year]
-        portfolio_value = decimal.Decimal(sum(asset.value for asset in asset_map.values()))
+        portfolio_value = decimal.Decimal(sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
 
         if portfolio_value < desired_cash:
             raise ValueError(f"Portfolio value for {portfolio_year} is not large enough")
@@ -428,7 +443,7 @@ class OldNisaAccount:
         for investment_year in sorted(self.year_to_asset_map.keys()):
 
             year_portfolio_value = decimal.Decimal(
-                sum(asset.value for asset in self.year_to_asset_map[investment_year].values())
+                sum((asset.value for asset in self.year_to_asset_map[investment_year].values()), decimal.Decimal(0))
             )
             withdrawal_from_year = min(desired_cash - total_withdrawal, year_portfolio_value)
 
@@ -465,11 +480,13 @@ class NisaAccount:
 
     @property
     def principal(self) -> decimal.Decimal:
-        return decimal.Decimal(sum(asset.principal for asset in self.asset_map.values()))
+        return decimal.Decimal(sum((asset.principal for asset in self.asset_map.values()), decimal.Decimal(0)))
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
-        return decimal.Decimal(sum(asset.value for asset in self.asset_map.values()))
+        return decimal.Decimal(
+            sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
+        ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def deposit(self, amount: decimal.Decimal, year: int, strategy: DepositStrategy):
 
@@ -745,7 +762,7 @@ class SimpleInvestmentManager:
         if (self.current_year - 20) in self.old_nisa_account.year_to_asset_map:
 
             asset_map = self.old_nisa_account.year_to_asset_map.pop(self.current_year - 20)
-            portfolio_value = decimal.Decimal(sum(asset.value for asset in asset_map.values()))
+            portfolio_value = decimal.Decimal(sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
 
             self.ordinary_investment_account.deposit(
                 portfolio_value,
