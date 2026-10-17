@@ -2,6 +2,7 @@
 Module with simulation logic
 """
 
+import copy
 import dataclasses
 import decimal
 import logging
@@ -171,7 +172,69 @@ class FinancesSimulator:
 
         except investments.InsufficientFunds as error:
 
-            LOGGER.error(error)
+            LOGGER.info(error)
             return pandas.DataFrame(investment_simulation)
 
         return pandas.DataFrame(investment_simulation)
+
+
+@dataclasses.dataclass
+class MonteCarloSimulatorInputs:
+
+    annual_costs_callable: core.AnnualCostsOfLiving
+    earned_annual_income_callable: core.EarnedAnnualIncome
+    investment_manager: investments.InvestmentManager
+    historical_economic_data: core.EconomicData
+    simulation_start_age: int
+    simulation_start_year: int
+    simulation_end_age: int
+    simulation_count: int
+
+    def __post_init__(self):
+
+        if self.simulation_end_age < self.simulation_start_age:
+            raise ValueError("simulation_end_age can't be smaller than simulation_start_age")
+
+        if self.simulation_count <= 0:
+            raise ValueError("simulation_count must be a positive integer")
+
+
+class MonteCarloSimulator:
+
+    def __init__(self, inputs: MonteCarloSimulatorInputs):
+
+        self.inputs = inputs
+
+    def run_simulations(self) -> list[pandas.DataFrame]:
+
+        economic_data_simulator = EconomicDataSimulator(
+            historical_economic_data=self.inputs.historical_economic_data
+        )
+
+        results = []
+
+        for simulation_index in range(self.inputs.simulation_count):
+
+            LOGGER.info(f"Running simulation {simulation_index + 1} of {self.inputs.simulation_count}")
+
+            simulated_economic_data = economic_data_simulator.generate_simulation(
+                start=self.inputs.simulation_start_year,
+                period=self.inputs.simulation_end_age - self.inputs.simulation_start_age + 1,
+                block_size=5
+            )
+
+            finances_simulator_inputs = FinancesSimulatorInputs(
+                annual_costs_callable=copy.deepcopy(self.inputs.annual_costs_callable),
+                earned_annual_income_callable=copy.deepcopy(self.inputs.earned_annual_income_callable),
+                investment_manager=copy.deepcopy(self.inputs.investment_manager),
+                simulated_economic_data=simulated_economic_data,
+                simulation_start_age=self.inputs.simulation_start_age,
+                simulation_start_year=self.inputs.simulation_start_year,
+                simulation_end_age=self.inputs.simulation_end_age
+            )
+
+            finances_simulator = FinancesSimulator(inputs=finances_simulator_inputs)
+
+            results.append(finances_simulator.run_simulation())
+
+        return results
