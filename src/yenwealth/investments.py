@@ -192,8 +192,8 @@ class OrdinaryInvestmentAccount:
 
     def deposit(self, amount: decimal.Decimal, strategy: DepositStrategy):
 
-        if amount < 0:
-            raise ValueError(f"Deposit amount should be non-negative, got {amount}")
+        if amount <= 0:
+            raise ValueError(f"Deposit amount should be positive, got {amount}")
 
         allocations = strategy.allocate(
             amount=amount,
@@ -279,8 +279,8 @@ class IdecoInvestmentAccount:
         if age >= self.max_deposit_age:
             raise ValueError(f"Deposit age {age} exceeds maximum allowed deposit age of {self.max_deposit_age}")
 
-        if amount < 0:
-            raise ValueError(f"Deposit amount should be non-negative, got {amount}")
+        if amount <= 0:
+            raise ValueError(f"Deposit amount should be positive, got {amount}")
 
         if amount > self.max_annual_contribution:
             raise ValueError(
@@ -490,11 +490,8 @@ class NisaAccount:
 
     def deposit(self, amount: decimal.Decimal, year: int, strategy: DepositStrategy):
 
-        if amount < 0:
-            raise ValueError(f"Deposit amount should be non-negative, got {amount}")
-
-        if amount == 0:
-            return
+        if amount <= 0:
+            raise ValueError(f"Deposit amount should be positive, got {amount}")
 
         if self.principal + amount > self.total_deposit_limit:
 
@@ -654,44 +651,45 @@ class SimpleInvestmentManager:
 
     def deposit(self, amount: decimal.Decimal, age: int):
 
-        if amount < 0:
-            raise ValueError(f"Deposit amount should be non-negative, got {amount}")
-
-        if amount == 0:
-            return
+        if amount <= 0:
+            raise ValueError(f"Deposit amount should be positive, got {amount}")
 
         if age < self.ideco_investment_account.max_deposit_age:
 
-            amount_deposited_to_ideco = min(amount, self.ideco_investment_account.max_annual_contribution)
+            amount_to_deposit_to_ideco = min(amount, self.ideco_investment_account.max_annual_contribution)
 
-            self.ideco_investment_account.deposit(
-                amount=amount_deposited_to_ideco,
-                age=age,
-                strategy=self.investment_policy.ideco_account_deposit_strategy
-            )
+            if amount_to_deposit_to_ideco > 0:
 
-            amount -= amount_deposited_to_ideco
+                self.ideco_investment_account.deposit(
+                    amount=amount_to_deposit_to_ideco,
+                    age=age,
+                    strategy=self.investment_policy.ideco_account_deposit_strategy
+                )
 
-            LOGGER.debug(
-                f"Deposited {utilities.format_million_yen(amount_deposited_to_ideco)} to iDeCo account")
+                amount -= amount_to_deposit_to_ideco
+
+                LOGGER.debug(
+                    f"Deposited {utilities.format_million_yen(amount_to_deposit_to_ideco)} to iDeCo account")
 
         if self.nisa_account.principal < self.nisa_account.total_deposit_limit:
 
-            amount_deposited_to_nisa = min(
+            amount_to_deposit_to_nisa = min(
                 self.nisa_account.total_deposit_limit - self.nisa_account.principal,
                 self.nisa_account.annual_deposit_limit - self.nisa_account.year_to_deposit_map[self.current_year],
                 amount
             )
 
-            self.nisa_account.deposit(
-                amount_deposited_to_nisa,
-                self.current_year,
-                self.investment_policy.nisa_account_deposit_strategy
-            )
-            amount -= amount_deposited_to_nisa
+            if amount_to_deposit_to_nisa > 0:
 
-            LOGGER.debug(
-                f"Deposited {utilities.format_million_yen(amount_deposited_to_nisa)} to NISA account")
+                self.nisa_account.deposit(
+                    amount_to_deposit_to_nisa,
+                    self.current_year,
+                    self.investment_policy.nisa_account_deposit_strategy
+                )
+                amount -= amount_to_deposit_to_nisa
+
+                LOGGER.debug(
+                    f"Deposited {utilities.format_million_yen(amount_to_deposit_to_nisa)} to NISA account")
 
         if amount > 0:
 
@@ -703,8 +701,8 @@ class SimpleInvestmentManager:
 
         desired_cash = desired_cash.quantize(constants.YEN, decimal.ROUND_UP)
 
-        if desired_cash < 0:
-            raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
+        if desired_cash <= 0:
+            raise ValueError(f"Withdrawal value should be positive, got {desired_cash}")
 
         total_cash_withdrawn = decimal.Decimal(0)
 
@@ -764,14 +762,16 @@ class SimpleInvestmentManager:
             asset_map = self.old_nisa_account.year_to_asset_map.pop(self.current_year - 20)
             portfolio_value = decimal.Decimal(sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
 
-            self.ordinary_investment_account.deposit(
-                portfolio_value,
-                self.investment_policy.ordinary_account_deposit_strategy)
+            if portfolio_value > 0:
 
-            LOGGER.debug(
-                f"Moved {utilities.format_million_yen(portfolio_value)} from old NISA account "
-                f"for year {self.current_year - 20} to ordinary investment account"
-            )
+                self.ordinary_investment_account.deposit(
+                    portfolio_value,
+                    self.investment_policy.ordinary_account_deposit_strategy)
+
+                LOGGER.debug(
+                    f"Moved {utilities.format_million_yen(portfolio_value)} from old NISA account "
+                    f"for year {self.current_year - 20} to ordinary investment account"
+                )
 
         # Check if we should do lump withdrawal from iDeCo
         if self._current_age == self.investment_policy.ideco.withdrawal_start_age:
@@ -781,36 +781,40 @@ class SimpleInvestmentManager:
                 self.investment_policy.ideco_account_withdraw_strategy
             )
 
-            self.ordinary_investment_account.deposit(
-                tax_free_lump_sum,
-                self.investment_policy.ordinary_account_deposit_strategy)
+            if tax_free_lump_sum > 0:
 
-            LOGGER.debug(
-                f"Withdrew tax-free lump sum of {utilities.format_million_yen(tax_free_lump_sum)} "
-                "from iDeCo account")
+                self.ordinary_investment_account.deposit(
+                    tax_free_lump_sum,
+                    self.investment_policy.ordinary_account_deposit_strategy)
+
+                LOGGER.debug(
+                    f"Withdrew tax-free lump sum of {utilities.format_million_yen(tax_free_lump_sum)} "
+                    "from iDeCo account")
 
         if self.nisa_account.principal < self.nisa_account.total_deposit_limit:
 
-            nisa_deposit = min(
+            amount_to_move_from_ordinaly_account_to_nisa = min(
                 self.nisa_account.total_deposit_limit - self.nisa_account.principal,
                 self.nisa_account.annual_deposit_limit,
                 self.ordinary_investment_account.max_cash_withdrawal
             )
 
-            self.ordinary_investment_account.withdraw(
-                nisa_deposit,
-                self.investment_policy.ordinary_account_withdraw_strategy)
+            if amount_to_move_from_ordinaly_account_to_nisa > 0:
 
-            self.nisa_account.deposit(
-                nisa_deposit,
-                self.current_year,
-                self.investment_policy.nisa_account_deposit_strategy
-            )
+                self.ordinary_investment_account.withdraw(
+                    amount_to_move_from_ordinaly_account_to_nisa,
+                    self.investment_policy.ordinary_account_withdraw_strategy)
 
-            LOGGER.debug(
-                f"Moved {utilities.format_million_yen(nisa_deposit)} "
-                "from ordinary investment account to NISA account"
-            )
+                self.nisa_account.deposit(
+                    amount_to_move_from_ordinaly_account_to_nisa,
+                    self.current_year,
+                    self.investment_policy.nisa_account_deposit_strategy
+                )
+
+                LOGGER.debug(
+                    f"Moved {utilities.format_million_yen(amount_to_move_from_ordinaly_account_to_nisa)} "
+                    "from ordinary investment account to NISA account"
+                )
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
 
