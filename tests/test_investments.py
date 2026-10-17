@@ -302,14 +302,14 @@ class TestOrdinaryInvestmentAccount:
             asset_map={
                 "VGT": yenwealth.investments.Asset(
                     name="VGT",
-                    principal=decimal.Decimal(10),
-                    gain=decimal.Decimal(5),
+                    principal=decimal.Decimal(1000),
+                    gain=decimal.Decimal(500),
                     annual_management_cost_rate=decimal.Decimal("0.1")
                 ),
                 "VOO": yenwealth.investments.Asset(
                     name="VOO",
-                    principal=decimal.Decimal(20),
-                    gain=decimal.Decimal(80),
+                    principal=decimal.Decimal(2000),
+                    gain=decimal.Decimal(8000),
                     annual_management_cost_rate=decimal.Decimal("0.1")
                 )
             },
@@ -319,24 +319,24 @@ class TestOrdinaryInvestmentAccount:
         strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
 
         account.withdraw(
-            desired_cash=decimal.Decimal(44),
+            desired_cash=decimal.Decimal(4400),
             strategy=strategy
         )
 
-        # We would expect that with capital gain tax rate of 0.5, VGT asset can provide 12.5 units
-        # (10 untaxed from principal, then 5 gross (2.5 net) from gain)
-        # Then VOO needs to provide net amount of 31.5 units.
+        # We would expect that with capital gain tax rate of 0.5, VGT asset can provide 1250 units
+        # (1000 untaxed from principal, then 500 gross (250 net) from gain)
+        # Then VOO needs to provide net amount of 3150 units.
         # VOO has 80% gain and we need to pay 50% capital gain tax on it, so net cash per 1 unit sold should be
         # 1 - (0.8 * 0.5) = 0.6.
-        # So to realize 31.5 units of net cash, we need a gross sale of 31.5 / 0.6 or 52.5.
-        # 20% of VOO is principal, and 20% of 52.5 is 10.5, so principal should go down from 20 to 9.5.
-        # Remaining 42 comes from gain, so gain should come down to 38
+        # So to realize 3150 units of net cash, we need a gross sale of 3150 / 0.6 or 5250.
+        # 20% of VOO is principal, and 20% of 5250 is 1050, so principal should go down from 2000 to 950.
+        # Remaining 4200 comes from gain, so gain should come down to 3800
 
         assert account.asset_map["VGT"].value == decimal.Decimal(0)
 
-        assert account.asset_map["VOO"].principal == decimal.Decimal("9.5")
-        assert account.asset_map["VOO"].gain == decimal.Decimal(38)
-        assert account.asset_map["VOO"].value == decimal.Decimal("47.5")
+        assert account.asset_map["VOO"].principal == decimal.Decimal(950)
+        assert account.asset_map["VOO"].gain == decimal.Decimal(3800)
+        assert account.asset_map["VOO"].value == decimal.Decimal(4750)
 
     def test_max_cash_widthdrawal(self):
 
@@ -725,38 +725,38 @@ class TestNisaAccount:
     def test_advance_one_year(self):
 
         nisa = yenwealth.investments.NisaAccount(
-            asset_map=self.asset_map(principal_vgt=100, principal_voo=50)
+            asset_map=self.asset_map(principal_vgt=1000, principal_voo=500)
         )
 
         nisa.advance_one_year(investment_returns={"VGT": decimal.Decimal("0.1"), "VOO": decimal.Decimal("0.2")})
 
-        assert nisa.asset_map["VGT"].gain == decimal.Decimal(10)
-        assert nisa.asset_map["VGT"].value == decimal.Decimal(110)
+        assert nisa.asset_map["VGT"].gain == decimal.Decimal(100)
+        assert nisa.asset_map["VGT"].value == decimal.Decimal(1100)
 
-        assert nisa.asset_map["VOO"].gain == decimal.Decimal(10)
-        assert nisa.asset_map["VOO"].value == decimal.Decimal(60)
+        assert nisa.asset_map["VOO"].gain == decimal.Decimal(100)
+        assert nisa.asset_map["VOO"].value == decimal.Decimal(600)
 
-        assert nisa.portfolio_value == decimal.Decimal(170)
+        assert nisa.portfolio_value == decimal.Decimal(1700)
 
-        nisa.deposit(amount=decimal.Decimal(50), year=2025, strategy=self.deposit_strategy())
+        nisa.deposit(amount=decimal.Decimal(500), year=2025, strategy=self.deposit_strategy())
 
-        assert nisa.asset_map["VGT"].principal == decimal.Decimal(125)
-        assert nisa.asset_map["VGT"].gain == decimal.Decimal(10)
+        assert nisa.asset_map["VGT"].principal == decimal.Decimal(1250)
+        assert nisa.asset_map["VGT"].gain == decimal.Decimal(100)
 
-        assert nisa.asset_map["VOO"].principal == decimal.Decimal(75)
-        assert nisa.asset_map["VOO"].gain == decimal.Decimal(10)
+        assert nisa.asset_map["VOO"].principal == decimal.Decimal(750)
+        assert nisa.asset_map["VOO"].gain == decimal.Decimal(100)
 
-        assert nisa.portfolio_value == decimal.Decimal(220)
+        assert nisa.portfolio_value == decimal.Decimal(2200)
 
         nisa.advance_one_year(investment_returns={"VGT": decimal.Decimal("0.1"), "VOO": decimal.Decimal("0.2")})
 
-        assert nisa.asset_map["VGT"].gain == decimal.Decimal("23.5")
-        assert nisa.asset_map["VGT"].value == decimal.Decimal("148.5")
+        assert nisa.asset_map["VGT"].gain == decimal.Decimal(235)
+        assert nisa.asset_map["VGT"].value == decimal.Decimal(1485)
 
-        assert nisa.asset_map["VOO"].gain == decimal.Decimal(27)
-        assert nisa.asset_map["VOO"].value == decimal.Decimal(102)
+        assert nisa.asset_map["VOO"].gain == decimal.Decimal(270)
+        assert nisa.asset_map["VOO"].value == decimal.Decimal(1020)
 
-        assert nisa.portfolio_value == decimal.Decimal("250.5")
+        assert nisa.portfolio_value == decimal.Decimal(2505)
 
     def test_withdrawal_over_portolio_value(self):
 
