@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.4.5
+- improved - various withdraw and deposit functions now throw an buy/sell value being zero
+- improved - SimpleInvestmentManager.optimize_investments and SimpleInvestmentManager.withdraw don't initiate any transactions that involve zero amount of money
+
 ### 0.4.4
 - improved - Asset.sell now throws InsufficientFunds instead of ValueError if not enough assets exist
 - improved - Asset.portfolio_value now rounds down to nearest yen. This prevents a lot of fractional errors down the line
