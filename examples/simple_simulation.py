@@ -1,5 +1,5 @@
 """
-A simple simulation showing how to set up FinancesSimulatorInputs inputs and
+A simple script showing how to set up FinancesSimulatorInputs inputs and
 execute a simulation using the FinancesSimulator class.
 """
 
@@ -10,11 +10,13 @@ import pandas
 
 import yenwealth.investments
 import yenwealth.simulations
+import yenwealth.utilities
 
 
 def main():
 
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.ERROR)
+    logger = logging.getLogger(__name__)
 
     simulation_start_age = 30
     simulation_end_age = 85
@@ -104,10 +106,11 @@ def main():
         simulated_economic_data=simulated_economic_data,
         simulation_start_age=simulation_start_age,
         simulation_start_year=simulation_start_year,
-        simulation_end_age=85
+        simulation_end_age=simulation_end_age
     )
 
-    yenwealth.simulations.FinancesSimulator(inputs=inputs).run_simulation()
+    simulation_result = yenwealth.simulations.FinancesSimulator(inputs=inputs).run_simulation()
+    logger.info(yenwealth.utilities.pretty_format_simulation_summary(simulation_result))
 
 
 if __name__ == "__main__":

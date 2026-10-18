@@ -9,3 +9,4 @@ pyright
 codespell .
 
 python examples/simple_simulation.py
+python examples/monte_carlo_simulation.py

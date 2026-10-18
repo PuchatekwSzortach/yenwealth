@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.5.0
+- added - added MonteCarloSimulator for running multiple financial simulations
+- added - added SimulationAnalyzer that allows to check how many simulations hit target goals
+
 ### 0.4.5
 - improved - various withdraw and deposit functions now throw an buy/sell value being zero
 - improved - SimpleInvestmentManager.optimize_investments and SimpleInvestmentManager.withdraw don't initiate any transactions that involve zero amount of money

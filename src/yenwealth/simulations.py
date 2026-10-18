@@ -2,15 +2,19 @@
 Module with simulation logic
 """
 
+import copy
 import dataclasses
 import decimal
+import itertools
 import logging
 import math
 import typing
 
 import arch.bootstrap
+import loky
 import numpy
 import pandas
+import tqdm
 
 from . import constants, core, investments
 
@@ -82,12 +86,12 @@ class FinancesSimulator:
 
         investment_simulation = {
             "age": numpy.full(simulation_step_count, numpy.nan),
-            "portfolio_value": numpy.full(simulation_step_count, numpy.nan),
-            "after_tax_portfolio_value": numpy.full(simulation_step_count, numpy.nan),
-            "cost_of_living": numpy.full(simulation_step_count, numpy.nan)
+            "gross_portfolio_value": numpy.full(simulation_step_count, decimal.Decimal("NaN")),
+            "net_portfolio_value": numpy.full(simulation_step_count, decimal.Decimal("NaN")),
+            "cost_of_living": numpy.full(simulation_step_count, decimal.Decimal("NaN"))
         }
 
-        if LOGGER.isEnabledFor(logging.INFO):
+        if LOGGER.isEnabledFor(logging.DEBUG):
 
             portfolio_summary = self.investment_manager.get_formatted_portfolio_summary_description()
             LOGGER.debug(f"Portfolio value at simulation start:\n{portfolio_summary}")
@@ -97,7 +101,7 @@ class FinancesSimulator:
             # While we expect to be alive and have money in our portfolio
             while (current_age <= self.inputs.simulation_end_age) and (self.investment_manager.portfolio_value > 0):
 
-                LOGGER.info(f"Simulating year {current_year} at age {current_age}")
+                LOGGER.debug(f"Simulating year {current_year} at age {current_age}")
 
                 self.investment_manager.optimize_investments()
 
@@ -160,8 +164,9 @@ class FinancesSimulator:
 
                 simulation_index = current_age - self.inputs.simulation_start_age
 
-                investment_simulation["portfolio_value"][simulation_index] = self.investment_manager.portfolio_value
-                investment_simulation["after_tax_portfolio_value"][simulation_index] = \
+                investment_simulation["gross_portfolio_value"][simulation_index] = \
+                    self.investment_manager.portfolio_value
+                investment_simulation["net_portfolio_value"][simulation_index] = \
                     self.investment_manager.after_tax_portfolio_value
                 investment_simulation["age"][simulation_index] = current_age
                 investment_simulation["cost_of_living"][simulation_index] = costs_of_living
@@ -171,7 +176,102 @@ class FinancesSimulator:
 
         except investments.InsufficientFunds as error:
 
-            LOGGER.error(error)
-            return pandas.DataFrame(investment_simulation)
+            LOGGER.debug(error)
 
-        return pandas.DataFrame(investment_simulation)
+            return pandas.DataFrame(
+                investment_simulation,
+                index=pandas.Index(
+                    range(self.inputs.simulation_start_age, self.inputs.simulation_end_age + 1), name="age")
+            )
+
+        return pandas.DataFrame(
+            investment_simulation,
+            index=pandas.Index(
+                range(self.inputs.simulation_start_age, self.inputs.simulation_end_age + 1), name="age")
+            )
+
+
+@dataclasses.dataclass
+class MonteCarloSimulatorInputs:
+
+    annual_costs_callable: core.AnnualCostsOfLiving
+    earned_annual_income_callable: core.EarnedAnnualIncome
+    investment_manager: investments.InvestmentManager
+    historical_economic_data: core.EconomicData
+    simulation_start_age: int
+    simulation_start_year: int
+    simulation_end_age: int
+    simulation_count: int
+
+    def __post_init__(self):
+
+        if self.simulation_end_age < self.simulation_start_age:
+            raise ValueError("simulation_end_age can't be smaller than simulation_start_age")
+
+        if self.simulation_count <= 0:
+            raise ValueError("simulation_count must be a positive integer")
+
+
+def _run_single_simulation(
+        inputs: MonteCarloSimulatorInputs,
+        economic_data_simulator: EconomicDataSimulator,
+        simulation_index: int
+) -> pandas.DataFrame:
+
+    LOGGER.debug(f"Running simulation {simulation_index + 1} of {inputs.simulation_count}")
+
+    simulated_economic_data = economic_data_simulator.generate_simulation(
+        start=inputs.simulation_start_year,
+        period=inputs.simulation_end_age - inputs.simulation_start_age + 1,
+        block_size=5
+    )
+
+    finances_simulator_inputs = FinancesSimulatorInputs(
+        annual_costs_callable=copy.deepcopy(inputs.annual_costs_callable),
+        earned_annual_income_callable=copy.deepcopy(inputs.earned_annual_income_callable),
+        investment_manager=copy.deepcopy(inputs.investment_manager),
+        simulated_economic_data=simulated_economic_data,
+        simulation_start_age=inputs.simulation_start_age,
+        simulation_start_year=inputs.simulation_start_year,
+        simulation_end_age=inputs.simulation_end_age
+    )
+
+    return FinancesSimulator(inputs=finances_simulator_inputs).run_simulation()
+
+
+class MonteCarloSimulator:
+
+    def __init__(self, inputs: MonteCarloSimulatorInputs):
+
+        self.inputs = inputs
+
+    def run_simulations(self) -> list[pandas.DataFrame]:
+
+        economic_data_simulator = EconomicDataSimulator(
+            historical_economic_data=self.inputs.historical_economic_data
+        )
+
+        show_progress_bar = LOGGER.isEnabledFor(logging.INFO)
+
+        results = []
+
+        with loky.get_reusable_executor() as executor:
+
+            results_generator = executor.map(
+                _run_single_simulation,
+                itertools.repeat(self.inputs),
+                itertools.repeat(economic_data_simulator),
+                range(self.inputs.simulation_count),
+                chunksize=64
+            )
+
+            results = list(
+                tqdm.tqdm(
+                    results_generator,
+                    desc="Running simulations",
+                    disable=not show_progress_bar,
+                    total=self.inputs.simulation_count
+                )
+            )
+
+        return results
