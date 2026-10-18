@@ -12,6 +12,7 @@ import typing
 import arch.bootstrap
 import numpy
 import pandas
+import tqdm
 
 from . import constants, core, investments
 
@@ -83,12 +84,12 @@ class FinancesSimulator:
 
         investment_simulation = {
             "age": numpy.full(simulation_step_count, numpy.nan),
-            "portfolio_value": numpy.full(simulation_step_count, numpy.nan),
-            "after_tax_portfolio_value": numpy.full(simulation_step_count, numpy.nan),
-            "cost_of_living": numpy.full(simulation_step_count, numpy.nan)
+            "gross_portfolio_value": numpy.full(simulation_step_count, decimal.Decimal("NaN")),
+            "net_portfolio_value": numpy.full(simulation_step_count, decimal.Decimal("NaN")),
+            "cost_of_living": numpy.full(simulation_step_count, decimal.Decimal("NaN"))
         }
 
-        if LOGGER.isEnabledFor(logging.INFO):
+        if LOGGER.isEnabledFor(logging.DEBUG):
 
             portfolio_summary = self.investment_manager.get_formatted_portfolio_summary_description()
             LOGGER.debug(f"Portfolio value at simulation start:\n{portfolio_summary}")
@@ -98,7 +99,7 @@ class FinancesSimulator:
             # While we expect to be alive and have money in our portfolio
             while (current_age <= self.inputs.simulation_end_age) and (self.investment_manager.portfolio_value > 0):
 
-                LOGGER.info(f"Simulating year {current_year} at age {current_age}")
+                LOGGER.debug(f"Simulating year {current_year} at age {current_age}")
 
                 self.investment_manager.optimize_investments()
 
@@ -161,8 +162,9 @@ class FinancesSimulator:
 
                 simulation_index = current_age - self.inputs.simulation_start_age
 
-                investment_simulation["portfolio_value"][simulation_index] = self.investment_manager.portfolio_value
-                investment_simulation["after_tax_portfolio_value"][simulation_index] = \
+                investment_simulation["gross_portfolio_value"][simulation_index] = \
+                    self.investment_manager.portfolio_value
+                investment_simulation["net_portfolio_value"][simulation_index] = \
                     self.investment_manager.after_tax_portfolio_value
                 investment_simulation["age"][simulation_index] = current_age
                 investment_simulation["cost_of_living"][simulation_index] = costs_of_living
@@ -172,10 +174,19 @@ class FinancesSimulator:
 
         except investments.InsufficientFunds as error:
 
-            LOGGER.info(error)
-            return pandas.DataFrame(investment_simulation)
+            LOGGER.debug(error)
 
-        return pandas.DataFrame(investment_simulation)
+            return pandas.DataFrame(
+                investment_simulation,
+                index=pandas.Index(
+                    range(self.inputs.simulation_start_age, self.inputs.simulation_end_age + 1), name="age")
+            )
+
+        return pandas.DataFrame(
+            investment_simulation,
+            index=pandas.Index(
+                range(self.inputs.simulation_start_age, self.inputs.simulation_end_age + 1), name="age")
+            )
 
 
 @dataclasses.dataclass
@@ -213,9 +224,9 @@ class MonteCarloSimulator:
 
         results = []
 
-        for simulation_index in range(self.inputs.simulation_count):
+        for simulation_index in tqdm.tqdm(range(self.inputs.simulation_count), desc="Running simulations"):
 
-            LOGGER.info(f"Running simulation {simulation_index + 1} of {self.inputs.simulation_count}")
+            LOGGER.debug(f"Running simulation {simulation_index + 1} of {self.inputs.simulation_count}")
 
             simulated_economic_data = economic_data_simulator.generate_simulation(
                 start=self.inputs.simulation_start_year,

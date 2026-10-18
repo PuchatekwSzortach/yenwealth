@@ -107,10 +107,10 @@ def test_simulation_contains_initial_state():
 
     result = simulator.run_simulation()
 
-    assert result["age"][0] == 50
-    assert result["portfolio_value"][0] == decimal.Decimal(123)
-    assert result["after_tax_portfolio_value"][0] == decimal.Decimal(100)
-    assert result["cost_of_living"][0] == decimal.Decimal(100)
+    assert result.index[0] == 50
+    assert result["gross_portfolio_value"][50] == decimal.Decimal(123)
+    assert result["net_portfolio_value"][50] == decimal.Decimal(100)
+    assert result["cost_of_living"][50] == decimal.Decimal(100)
 
 
 def test_simulation_runs_until_end_age():

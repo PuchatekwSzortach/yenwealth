@@ -9,6 +9,7 @@ import random
 
 import pandas
 
+import yenwealth.analysis
 import yenwealth.investments
 import yenwealth.simulations
 import yenwealth.utilities
@@ -107,13 +108,23 @@ def main():
         simulation_start_age=simulation_start_age,
         simulation_start_year=simulation_start_year,
         simulation_end_age=simulation_end_age,
-        simulation_count=10
+        simulation_count=10000
     )
 
     simulations = yenwealth.simulations.MonteCarloSimulator(inputs=inputs).run_simulations()
 
-    for index in range (3):
-        logger.info(yenwealth.utilities.pretty_format_simulation_summary(simulations[index]))
+    # for simulation in simulations:
+    #     logger.info(yenwealth.utilities.pretty_format_simulation_summary(simulation))
+
+    report = yenwealth.analysis.SimulationAnalyzer().get_report(
+        simulations=simulations,
+        targets=[
+            yenwealth.analysis.FinancialTarget(age=45, net_portfolio_value=decimal.Decimal(10_000_000)),
+            yenwealth.analysis.FinancialTarget(age=70, net_portfolio_value=decimal.Decimal(5_000_000))
+        ]
+    )
+
+    logger.info("\n" + report)
 
 if __name__ == "__main__":
     main()
