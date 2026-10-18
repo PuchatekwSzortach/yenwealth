@@ -236,9 +236,7 @@ def _run_single_simulation(
         simulation_end_age=inputs.simulation_end_age
     )
 
-    finances_simulator = FinancesSimulator(inputs=finances_simulator_inputs)
-
-    return finances_simulator.run_simulation()
+    return FinancesSimulator(inputs=finances_simulator_inputs).run_simulation()
 
 
 class MonteCarloSimulator:

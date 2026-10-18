@@ -1,5 +1,5 @@
 """
-A simple simulation showing how to set up FinancesSimulatorInputs inputs and
+A simple script showing how to set up FinancesSimulatorInputs inputs and
 execute a simulation using the FinancesSimulator class.
 """
 

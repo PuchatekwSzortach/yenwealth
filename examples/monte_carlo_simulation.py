@@ -1,6 +1,6 @@
 """
-A monte carlo simulation showing how to set up MonteCarloSimulatorInputs inputs and
-execute a simulation using the MonteCarloSimulator class.
+A simple script showing how to set up MonteCarloSimulatorInputs inputs and
+execute a number of simulations using the MonteCarloSimulator class, and analyze the results.
 """
 
 import decimal

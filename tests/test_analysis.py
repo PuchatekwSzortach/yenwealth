@@ -20,14 +20,14 @@ class TestSimulationAnalyzer:
             33: decimal.Decimal(300)
         }
 
-        # age: age_to_net_portfolio_value.keys()
-
         simulation_data = {
             "net_portfolio_value": list(age_to_net_portfolio_value.values())
         }
 
-        simulation_result = pandas.DataFrame(simulation_data)
-        simulation_result.index = pandas.Index(age_to_net_portfolio_value.keys(), name="age")
+        simulation_result = pandas.DataFrame(
+            simulation_data,
+            index=pandas.Index(age_to_net_portfolio_value.keys(), name="age")
+        )
 
         targets = [
             yenwealth.analysis.FinancialTarget(age=31, net_portfolio_value=decimal.Decimal(140)),
@@ -60,7 +60,10 @@ class TestSimulationAnalyzer:
             "net_portfolio_value": list(age_to_net_portfolio_value.values())
         }
 
-        simulation_result = pandas.DataFrame(simulation_data).set_index("age")
+        simulation_result = pandas.DataFrame(
+            simulation_data,
+            index=pandas.Index(age_to_net_portfolio_value.keys(), name="age")
+        )
 
         targets = [
             yenwealth.analysis.FinancialTarget(age=31, net_portfolio_value=decimal.Decimal(140)),
