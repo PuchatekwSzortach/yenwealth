@@ -12,12 +12,11 @@ import pandas
 import yenwealth.analysis
 import yenwealth.investments
 import yenwealth.simulations
-import yenwealth.utilities
 
 
 def main():
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.WARNING)
     logger = logging.getLogger(__name__)
 
     simulation_start_age = 30
@@ -108,13 +107,10 @@ def main():
         simulation_start_age=simulation_start_age,
         simulation_start_year=simulation_start_year,
         simulation_end_age=simulation_end_age,
-        simulation_count=10000
+        simulation_count=10
     )
 
     simulations = yenwealth.simulations.MonteCarloSimulator(inputs=inputs).run_simulations()
-
-    # for simulation in simulations:
-    #     logger.info(yenwealth.utilities.pretty_format_simulation_summary(simulation))
 
     report = yenwealth.analysis.SimulationAnalyzer().get_report(
         simulations=simulations,

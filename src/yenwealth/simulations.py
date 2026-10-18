@@ -5,11 +5,13 @@ Module with simulation logic
 import copy
 import dataclasses
 import decimal
+import itertools
 import logging
 import math
 import typing
 
 import arch.bootstrap
+import loky
 import numpy
 import pandas
 import tqdm
@@ -210,6 +212,35 @@ class MonteCarloSimulatorInputs:
             raise ValueError("simulation_count must be a positive integer")
 
 
+def _run_single_simulation(
+        inputs: MonteCarloSimulatorInputs,
+        economic_data_simulator: EconomicDataSimulator,
+        simulation_index: int
+) -> pandas.DataFrame:
+
+    LOGGER.debug(f"Running simulation {simulation_index + 1} of {inputs.simulation_count}")
+
+    simulated_economic_data = economic_data_simulator.generate_simulation(
+        start=inputs.simulation_start_year,
+        period=inputs.simulation_end_age - inputs.simulation_start_age + 1,
+        block_size=5
+    )
+
+    finances_simulator_inputs = FinancesSimulatorInputs(
+        annual_costs_callable=copy.deepcopy(inputs.annual_costs_callable),
+        earned_annual_income_callable=copy.deepcopy(inputs.earned_annual_income_callable),
+        investment_manager=copy.deepcopy(inputs.investment_manager),
+        simulated_economic_data=simulated_economic_data,
+        simulation_start_age=inputs.simulation_start_age,
+        simulation_start_year=inputs.simulation_start_year,
+        simulation_end_age=inputs.simulation_end_age
+    )
+
+    finances_simulator = FinancesSimulator(inputs=finances_simulator_inputs)
+
+    return finances_simulator.run_simulation()
+
+
 class MonteCarloSimulator:
 
     def __init__(self, inputs: MonteCarloSimulatorInputs):
@@ -222,30 +253,27 @@ class MonteCarloSimulator:
             historical_economic_data=self.inputs.historical_economic_data
         )
 
+        show_progress_bar = LOGGER.isEnabledFor(logging.INFO)
+
         results = []
 
-        for simulation_index in tqdm.tqdm(range(self.inputs.simulation_count), desc="Running simulations"):
+        with loky.get_reusable_executor() as executor:
 
-            LOGGER.debug(f"Running simulation {simulation_index + 1} of {self.inputs.simulation_count}")
-
-            simulated_economic_data = economic_data_simulator.generate_simulation(
-                start=self.inputs.simulation_start_year,
-                period=self.inputs.simulation_end_age - self.inputs.simulation_start_age + 1,
-                block_size=5
+            results_generator = executor.map(
+                _run_single_simulation,
+                itertools.repeat(self.inputs),
+                itertools.repeat(economic_data_simulator),
+                range(self.inputs.simulation_count),
+                chunksize=64
             )
 
-            finances_simulator_inputs = FinancesSimulatorInputs(
-                annual_costs_callable=copy.deepcopy(self.inputs.annual_costs_callable),
-                earned_annual_income_callable=copy.deepcopy(self.inputs.earned_annual_income_callable),
-                investment_manager=copy.deepcopy(self.inputs.investment_manager),
-                simulated_economic_data=simulated_economic_data,
-                simulation_start_age=self.inputs.simulation_start_age,
-                simulation_start_year=self.inputs.simulation_start_year,
-                simulation_end_age=self.inputs.simulation_end_age
+            results = list(
+                tqdm.tqdm(
+                    results_generator,
+                    desc="Running simulations",
+                    disable=not show_progress_bar,
+                    total=self.inputs.simulation_count
+                )
             )
-
-            finances_simulator = FinancesSimulator(inputs=finances_simulator_inputs)
-
-            results.append(finances_simulator.run_simulation())
 
         return results
