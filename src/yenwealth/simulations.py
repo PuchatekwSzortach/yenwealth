@@ -53,16 +53,12 @@ class EconomicDataSimulator:
         )
 
 
-@dataclasses.dataclass
-class FinancesSimulatorInputs:
+@dataclasses.dataclass(frozen=True)
+class FinancesSimulatorParameters:
 
-    annual_costs_callable: core.AnnualCostsOfLiving
-    earned_annual_income_callable: core.EarnedAnnualIncome
-    investment_manager: investments.InvestmentManager
-    simulated_economic_data: core.EconomicData
     simulation_start_age: int
-    simulation_start_year: int
     simulation_end_age: int
+    simulation_start_year: int
 
     def __post_init__(self):
 
@@ -70,19 +66,36 @@ class FinancesSimulatorInputs:
             raise ValueError("simulation_end_age can't be smaller than simulation_start_age")
 
 
+@dataclasses.dataclass
+class FinancesSimulatorDependencies:
+
+    investment_manager: investments.InvestmentManager
+    earned_annual_income_callable: core.EarnedAnnualIncome
+    annual_costs_callable: core.AnnualCostsOfLiving
+
+
+@dataclasses.dataclass
+class FinancesSimulatorInputs:
+
+    parameters: FinancesSimulatorParameters
+    dependencies: FinancesSimulatorDependencies
+    simulated_economic_data: core.EconomicData
+
+
 class FinancesSimulator:
 
     def __init__(self, inputs: FinancesSimulatorInputs):
 
         self.inputs = inputs
-        self.investment_manager = self.inputs.investment_manager
+        self.investment_manager = self.inputs.dependencies.investment_manager
 
     def run_simulation(self) -> pandas.DataFrame:
 
-        current_age = self.inputs.simulation_start_age
-        current_year = self.inputs.simulation_start_year
+        current_age = self.inputs.parameters.simulation_start_age
+        current_year = self.inputs.parameters.simulation_start_year
 
-        simulation_step_count = self.inputs.simulation_end_age - self.inputs.simulation_start_age + 1
+        simulation_step_count = self.inputs.parameters.simulation_end_age - \
+            self.inputs.parameters.simulation_start_age + 1
 
         investment_simulation = {
             "age": numpy.full(simulation_step_count, numpy.nan),
@@ -99,7 +112,8 @@ class FinancesSimulator:
         try:
 
             # While we expect to be alive and have money in our portfolio
-            while (current_age <= self.inputs.simulation_end_age) and (self.investment_manager.portfolio_value > 0):
+            while (current_age <= self.inputs.parameters.simulation_end_age) and \
+                    (self.investment_manager.portfolio_value > 0):
 
                 LOGGER.debug(f"Simulating year {current_year} at age {current_age}")
 
@@ -110,8 +124,8 @@ class FinancesSimulator:
                     portfolio_summary = self.investment_manager.get_formatted_portfolio_summary_description()
                     LOGGER.debug(f"Portfolio value at age {current_age} - at year start:\n{portfolio_summary}")
 
-                earned_income = self.inputs.earned_annual_income_callable(current_age)
-                costs_of_living = self.inputs.annual_costs_callable(current_age)
+                earned_income = self.inputs.dependencies.earned_annual_income_callable(current_age)
+                costs_of_living = self.inputs.dependencies.annual_costs_callable(current_age)
 
                 withdrawal = max(
                     costs_of_living - earned_income,
@@ -162,7 +176,7 @@ class FinancesSimulator:
 
                 self.investment_manager.advance_one_year(investment_returns=investment_returns)
 
-                simulation_index = current_age - self.inputs.simulation_start_age
+                simulation_index = current_age - self.inputs.parameters.simulation_start_age
 
                 investment_simulation["gross_portfolio_value"][simulation_index] = \
                     self.investment_manager.portfolio_value
@@ -181,14 +195,24 @@ class FinancesSimulator:
             return pandas.DataFrame(
                 investment_simulation,
                 index=pandas.Index(
-                    range(self.inputs.simulation_start_age, self.inputs.simulation_end_age + 1), name="age")
+                    range(
+                        self.inputs.parameters.simulation_start_age,
+                        self.inputs.parameters.simulation_end_age + 1
+                    ),
+                    name="age"
+                )
             )
 
         return pandas.DataFrame(
             investment_simulation,
             index=pandas.Index(
-                range(self.inputs.simulation_start_age, self.inputs.simulation_end_age + 1), name="age")
+                range(
+                    self.inputs.parameters.simulation_start_age,
+                    self.inputs.parameters.simulation_end_age + 1
+                ),
+                name="age"
             )
+        )
 
 
 @dataclasses.dataclass
@@ -227,13 +251,17 @@ def _run_single_simulation(
     )
 
     finances_simulator_inputs = FinancesSimulatorInputs(
-        annual_costs_callable=copy.deepcopy(inputs.annual_costs_callable),
-        earned_annual_income_callable=copy.deepcopy(inputs.earned_annual_income_callable),
-        investment_manager=copy.deepcopy(inputs.investment_manager),
-        simulated_economic_data=simulated_economic_data,
-        simulation_start_age=inputs.simulation_start_age,
-        simulation_start_year=inputs.simulation_start_year,
-        simulation_end_age=inputs.simulation_end_age
+        parameters=FinancesSimulatorParameters(
+            simulation_start_age=inputs.simulation_start_age,
+            simulation_end_age=inputs.simulation_end_age,
+            simulation_start_year=inputs.simulation_start_year
+        ),
+        dependencies=FinancesSimulatorDependencies(
+            investment_manager=copy.deepcopy(inputs.investment_manager),
+            earned_annual_income_callable=copy.deepcopy(inputs.earned_annual_income_callable),
+            annual_costs_callable=copy.deepcopy(inputs.annual_costs_callable)
+        ),
+        simulated_economic_data=simulated_economic_data
     )
 
     return FinancesSimulator(inputs=finances_simulator_inputs).run_simulation()
