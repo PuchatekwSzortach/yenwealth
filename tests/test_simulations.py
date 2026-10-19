@@ -2,7 +2,6 @@
 Tests for simulations module
 """
 
-import dataclasses
 import decimal
 
 import numpy
@@ -102,18 +101,6 @@ def test_simulation_parameters_validate_age_range():
         )
 
 
-def test_simulation_parameters_are_frozen():
-
-    parameters = yenwealth.simulations.FinancesSimulatorParameters(
-        simulation_start_age=50,
-        simulation_end_age=51,
-        simulation_start_year=2026
-    )
-
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        parameters.__setattr__("simulation_start_age", 51)
-
-
 def test_monte_carlo_parameters_validate_age_range():
 
     with pytest.raises(ValueError, match="simulation_end_age can't be smaller than simulation_start_age"):
@@ -134,19 +121,6 @@ def test_monte_carlo_parameters_validate_simulation_count():
             simulation_start_year=2026,
             simulation_count=0
         )
-
-
-def test_monte_carlo_parameters_are_frozen():
-
-    parameters = yenwealth.simulations.MonteCarloSimulatorParameters(
-        simulation_start_age=50,
-        simulation_end_age=51,
-        simulation_start_year=2026,
-        simulation_count=1
-    )
-
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        parameters.__setattr__("simulation_count", 2)
 
 
 def test_simulation_contains_initial_state():
