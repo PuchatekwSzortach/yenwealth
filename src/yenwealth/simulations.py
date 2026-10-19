@@ -67,7 +67,7 @@ class FinancesSimulatorParameters:
 
 
 @dataclasses.dataclass
-class FinancesSimulatorDependencies:
+class FinancesSimulatorRuntime:
 
     investment_manager: investments.InvestmentManager
     earned_annual_income_callable: core.EarnedAnnualIncome
@@ -78,8 +78,25 @@ class FinancesSimulatorDependencies:
 class FinancesSimulatorInputs:
 
     parameters: FinancesSimulatorParameters
-    dependencies: FinancesSimulatorDependencies
+    runtime: FinancesSimulatorRuntime
     simulated_economic_data: core.EconomicData
+
+
+@dataclasses.dataclass(frozen=True)
+class MonteCarloSimulatorParameters:
+
+    simulation_start_age: int
+    simulation_end_age: int
+    simulation_start_year: int
+    simulation_count: int
+
+    def __post_init__(self):
+
+        if self.simulation_end_age < self.simulation_start_age:
+            raise ValueError("simulation_end_age can't be smaller than simulation_start_age")
+
+        if self.simulation_count <= 0:
+            raise ValueError("simulation_count must be a positive integer")
 
 
 class FinancesSimulator:
@@ -87,7 +104,7 @@ class FinancesSimulator:
     def __init__(self, inputs: FinancesSimulatorInputs):
 
         self.inputs = inputs
-        self.investment_manager = self.inputs.dependencies.investment_manager
+        self.investment_manager = self.inputs.runtime.investment_manager
 
     def run_simulation(self) -> pandas.DataFrame:
 
@@ -124,8 +141,8 @@ class FinancesSimulator:
                     portfolio_summary = self.investment_manager.get_formatted_portfolio_summary_description()
                     LOGGER.debug(f"Portfolio value at age {current_age} - at year start:\n{portfolio_summary}")
 
-                earned_income = self.inputs.dependencies.earned_annual_income_callable(current_age)
-                costs_of_living = self.inputs.dependencies.annual_costs_callable(current_age)
+                earned_income = self.inputs.runtime.earned_annual_income_callable(current_age)
+                costs_of_living = self.inputs.runtime.annual_costs_callable(current_age)
 
                 withdrawal = max(
                     costs_of_living - earned_income,
@@ -218,22 +235,9 @@ class FinancesSimulator:
 @dataclasses.dataclass
 class MonteCarloSimulatorInputs:
 
-    annual_costs_callable: core.AnnualCostsOfLiving
-    earned_annual_income_callable: core.EarnedAnnualIncome
-    investment_manager: investments.InvestmentManager
+    parameters: MonteCarloSimulatorParameters
+    runtime: FinancesSimulatorRuntime
     historical_economic_data: core.EconomicData
-    simulation_start_age: int
-    simulation_start_year: int
-    simulation_end_age: int
-    simulation_count: int
-
-    def __post_init__(self):
-
-        if self.simulation_end_age < self.simulation_start_age:
-            raise ValueError("simulation_end_age can't be smaller than simulation_start_age")
-
-        if self.simulation_count <= 0:
-            raise ValueError("simulation_count must be a positive integer")
 
 
 def _run_single_simulation(
@@ -242,24 +246,24 @@ def _run_single_simulation(
         simulation_index: int
 ) -> pandas.DataFrame:
 
-    LOGGER.debug(f"Running simulation {simulation_index + 1} of {inputs.simulation_count}")
+    LOGGER.debug(f"Running simulation {simulation_index + 1} of {inputs.parameters.simulation_count}")
 
     simulated_economic_data = economic_data_simulator.generate_simulation(
-        start=inputs.simulation_start_year,
-        period=inputs.simulation_end_age - inputs.simulation_start_age + 1,
+        start=inputs.parameters.simulation_start_year,
+        period=inputs.parameters.simulation_end_age - inputs.parameters.simulation_start_age + 1,
         block_size=5
     )
 
     finances_simulator_inputs = FinancesSimulatorInputs(
         parameters=FinancesSimulatorParameters(
-            simulation_start_age=inputs.simulation_start_age,
-            simulation_end_age=inputs.simulation_end_age,
-            simulation_start_year=inputs.simulation_start_year
+            simulation_start_age=inputs.parameters.simulation_start_age,
+            simulation_end_age=inputs.parameters.simulation_end_age,
+            simulation_start_year=inputs.parameters.simulation_start_year
         ),
-        dependencies=FinancesSimulatorDependencies(
-            investment_manager=copy.deepcopy(inputs.investment_manager),
-            earned_annual_income_callable=copy.deepcopy(inputs.earned_annual_income_callable),
-            annual_costs_callable=copy.deepcopy(inputs.annual_costs_callable)
+        runtime=FinancesSimulatorRuntime(
+            investment_manager=copy.deepcopy(inputs.runtime.investment_manager),
+            earned_annual_income_callable=copy.deepcopy(inputs.runtime.earned_annual_income_callable),
+            annual_costs_callable=copy.deepcopy(inputs.runtime.annual_costs_callable)
         ),
         simulated_economic_data=simulated_economic_data
     )
@@ -289,7 +293,7 @@ class MonteCarloSimulator:
                 _run_single_simulation,
                 itertools.repeat(self.inputs),
                 itertools.repeat(economic_data_simulator),
-                range(self.inputs.simulation_count),
+                range(self.inputs.parameters.simulation_count),
                 chunksize=64
             )
 
@@ -298,7 +302,7 @@ class MonteCarloSimulator:
                     results_generator,
                     desc="Running simulations",
                     disable=not show_progress_bar,
-                    total=self.inputs.simulation_count
+                    total=self.inputs.parameters.simulation_count
                 )
             )
 

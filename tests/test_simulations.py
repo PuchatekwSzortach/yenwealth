@@ -2,7 +2,6 @@
 Tests for simulations module
 """
 
-import dataclasses
 import decimal
 
 import numpy
@@ -83,7 +82,7 @@ def make_inputs(
             simulation_end_age=end_age,
             simulation_start_year=start_year
         ),
-        dependencies=yenwealth.simulations.FinancesSimulatorDependencies(
+        runtime=yenwealth.simulations.FinancesSimulatorRuntime(
             annual_costs_callable=lambda age: costs,
             earned_annual_income_callable=lambda age: income,
             investment_manager=investment_manager
@@ -102,16 +101,26 @@ def test_simulation_parameters_validate_age_range():
         )
 
 
-def test_simulation_parameters_are_frozen():
+def test_monte_carlo_parameters_validate_age_range():
 
-    parameters = yenwealth.simulations.FinancesSimulatorParameters(
-        simulation_start_age=50,
-        simulation_end_age=51,
-        simulation_start_year=2026
-    )
+    with pytest.raises(ValueError, match="simulation_end_age can't be smaller than simulation_start_age"):
+        yenwealth.simulations.MonteCarloSimulatorParameters(
+            simulation_start_age=51,
+            simulation_end_age=50,
+            simulation_start_year=2026,
+            simulation_count=1
+        )
 
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        parameters.__setattr__("simulation_start_age", 51)
+
+def test_monte_carlo_parameters_validate_simulation_count():
+
+    with pytest.raises(ValueError, match="simulation_count must be a positive integer"):
+        yenwealth.simulations.MonteCarloSimulatorParameters(
+            simulation_start_age=50,
+            simulation_end_age=51,
+            simulation_start_year=2026,
+            simulation_count=0
+        )
 
 
 def test_simulation_contains_initial_state():
@@ -305,8 +314,8 @@ def test_callables_are_called_with_correct_ages():
     )
 
     # Replace the callables with ones that record their arguments.
-    inputs.dependencies.annual_costs_callable = costs
-    inputs.dependencies.earned_annual_income_callable = income
+    inputs.runtime.annual_costs_callable = costs
+    inputs.runtime.earned_annual_income_callable = income
 
     simulator = yenwealth.simulations.FinancesSimulator(inputs)
     simulator.run_simulation()
