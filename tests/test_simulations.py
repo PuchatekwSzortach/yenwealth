@@ -2,10 +2,12 @@
 Tests for simulations module
 """
 
+import dataclasses
 import decimal
 
 import numpy
 import pandas
+import pytest
 
 import yenwealth.core
 import yenwealth.investments
@@ -76,14 +78,40 @@ def make_inputs(
     simulated_economic_data.inflation_over_time.index.name = "year"
 
     return yenwealth.simulations.FinancesSimulatorInputs(
-        annual_costs_callable=lambda age: costs,
-        earned_annual_income_callable=lambda age: income,
-        investment_manager=investment_manager,
-        simulated_economic_data=simulated_economic_data,
-        simulation_start_age=start_age,
-        simulation_start_year=start_year,
-        simulation_end_age=end_age
+        parameters=yenwealth.simulations.FinancesSimulatorParameters(
+            simulation_start_age=start_age,
+            simulation_end_age=end_age,
+            simulation_start_year=start_year
+        ),
+        dependencies=yenwealth.simulations.FinancesSimulatorDependencies(
+            annual_costs_callable=lambda age: costs,
+            earned_annual_income_callable=lambda age: income,
+            investment_manager=investment_manager
+        ),
+        simulated_economic_data=simulated_economic_data
     )
+
+
+def test_simulation_parameters_validate_age_range():
+
+    with pytest.raises(ValueError, match="simulation_end_age can't be smaller than simulation_start_age"):
+        yenwealth.simulations.FinancesSimulatorParameters(
+            simulation_start_age=51,
+            simulation_end_age=50,
+            simulation_start_year=2026
+        )
+
+
+def test_simulation_parameters_are_frozen():
+
+    parameters = yenwealth.simulations.FinancesSimulatorParameters(
+        simulation_start_age=50,
+        simulation_end_age=51,
+        simulation_start_year=2026
+    )
+
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        parameters.__setattr__("simulation_start_age", 51)
 
 
 def test_simulation_contains_initial_state():
@@ -277,8 +305,8 @@ def test_callables_are_called_with_correct_ages():
     )
 
     # Replace the callables with ones that record their arguments.
-    inputs.annual_costs_callable = costs
-    inputs.earned_annual_income_callable = income
+    inputs.dependencies.annual_costs_callable = costs
+    inputs.dependencies.earned_annual_income_callable = income
 
     simulator = yenwealth.simulations.FinancesSimulator(inputs)
     simulator.run_simulation()
