@@ -52,62 +52,66 @@ def main():
     )
 
     inputs = yenwealth.simulations.MonteCarloSimulatorInputs(
-        annual_costs_callable=lambda age: decimal.Decimal(4_000_000),
-        earned_annual_income_callable=
-        lambda age: decimal.Decimal(5_000_000) if age < 65 else decimal.Decimal(2_000_000),
-        investment_manager=yenwealth.investments.SimpleInvestmentManager(
-            ordinary_investment_account=yenwealth.investments.OrdinaryInvestmentAccount(
-                asset_map={
-                    "VOO": yenwealth.investments.Asset(
-                        name="VOO",
-                        principal=decimal.Decimal(1_000_000),
-                        gain=decimal.Decimal(0),
-                        annual_management_cost_rate=decimal.Decimal("0.001")
-                    )
-                }
-            ),
-            ideco_investment_account=yenwealth.investments.IdecoInvestmentAccount(
-                asset_map={
-                    "VOO": yenwealth.investments.Asset(
-                        name="VOO",
-                        principal=decimal.Decimal(500_000),
-                        gain=decimal.Decimal(200_000),
-                        annual_management_cost_rate=decimal.Decimal("0.001")
-                    )
-                },
-                contribution_start_year=2015
-            ),
-            old_nisa_account=yenwealth.investments.OldNisaAccount(
-                year_to_asset_map={
-                    2020: {
+        parameters=yenwealth.simulations.MonteCarloSimulatorParameters(
+            simulation_start_age=simulation_start_age,
+            simulation_end_age=simulation_end_age,
+            simulation_start_year=simulation_start_year,
+            simulation_count=10
+        ),
+        runtime=yenwealth.simulations.FinancesSimulatorRuntime(
+            annual_costs_callable=lambda age: decimal.Decimal(4_000_000),
+            earned_annual_income_callable=
+            lambda age: decimal.Decimal(5_000_000) if age < 65 else decimal.Decimal(2_000_000),
+            investment_manager=yenwealth.investments.SimpleInvestmentManager(
+                ordinary_investment_account=yenwealth.investments.OrdinaryInvestmentAccount(
+                    asset_map={
                         "VOO": yenwealth.investments.Asset(
                             name="VOO",
                             principal=decimal.Decimal(1_000_000),
-                            gain=decimal.Decimal(500_000),
+                            gain=decimal.Decimal(0),
                             annual_management_cost_rate=decimal.Decimal("0.001")
                         )
                     }
-                }
-            ),
-            nisa_account=yenwealth.investments.NisaAccount(
-                asset_map={
-                    "VOO": yenwealth.investments.Asset(
-                        name="VOO",
-                        principal=decimal.Decimal(500_000),
-                        gain=decimal.Decimal(0),
-                        annual_management_cost_rate=decimal.Decimal("0.001")
-                    )
-                }
-            ),
-            investment_policy=investment_policy,
-            simulation_start_age=simulation_start_age,
-            simulation_start_year=simulation_start_year
+                ),
+                ideco_investment_account=yenwealth.investments.IdecoInvestmentAccount(
+                    asset_map={
+                        "VOO": yenwealth.investments.Asset(
+                            name="VOO",
+                            principal=decimal.Decimal(500_000),
+                            gain=decimal.Decimal(200_000),
+                            annual_management_cost_rate=decimal.Decimal("0.001")
+                        )
+                    },
+                    contribution_start_year=2015
+                ),
+                old_nisa_account=yenwealth.investments.OldNisaAccount(
+                    year_to_asset_map={
+                        2020: {
+                            "VOO": yenwealth.investments.Asset(
+                                name="VOO",
+                                principal=decimal.Decimal(1_000_000),
+                                gain=decimal.Decimal(500_000),
+                                annual_management_cost_rate=decimal.Decimal("0.001")
+                            )
+                        }
+                    }
+                ),
+                nisa_account=yenwealth.investments.NisaAccount(
+                    asset_map={
+                        "VOO": yenwealth.investments.Asset(
+                            name="VOO",
+                            principal=decimal.Decimal(500_000),
+                            gain=decimal.Decimal(0),
+                            annual_management_cost_rate=decimal.Decimal("0.001")
+                        )
+                    }
+                ),
+                investment_policy=investment_policy,
+                simulation_start_age=simulation_start_age,
+                simulation_start_year=simulation_start_year
+            )
         ),
-        historical_economic_data=historical_economic_data,
-        simulation_start_age=simulation_start_age,
-        simulation_start_year=simulation_start_year,
-        simulation_end_age=simulation_end_age,
-        simulation_count=10
+        historical_economic_data=historical_economic_data
     )
 
     simulations = yenwealth.simulations.MonteCarloSimulator(inputs=inputs).run_simulations()
