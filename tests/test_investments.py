@@ -378,6 +378,32 @@ class TestOrdinaryInvestmentAccount:
         assert account.asset_map["VOO"].gain == decimal.Decimal(3800)
         assert account.asset_map["VOO"].value == decimal.Decimal(4750)
 
+    def test_withdraw_with_negative_gain(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VGT": yenwealth.investments.Asset(
+                    name="VGT",
+                    principal=decimal.Decimal(100),
+                    gain=decimal.Decimal(-20),
+                    annual_management_cost_rate=decimal.Decimal(0)
+                )
+            },
+            capital_gain_tax_rate=decimal.Decimal("0.2")
+        )
+
+        assert account.portfolio_value == decimal.Decimal(80)
+        assert account.max_cash_withdrawal == decimal.Decimal(80)
+
+        account.withdraw(
+            desired_cash=decimal.Decimal(20),
+            strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT"])
+        )
+
+        assert account.asset_map["VGT"].principal == decimal.Decimal(75)
+        assert account.asset_map["VGT"].gain == decimal.Decimal(-15)
+        assert account.asset_map["VGT"].value == decimal.Decimal(60)
+
     def test_max_cash_widthdrawal(self):
 
         account = yenwealth.investments.OrdinaryInvestmentAccount(

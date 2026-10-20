@@ -1,5 +1,8 @@
 # Changelog
 
+### 0.5.2
+- improved - OrdinaryInvestmentAccount.withdraw method now doesn't treat selling asset with negative gain as tax benefit, instead assuming no tax benefits from such transaction.
+
 ### 0.5.1
 - improved - split fields of FinancesSimulatorInputs and MonteCarloSimulatorInputs into smaller, more focused classes
 - improved - MonteCarloSimulatorInputs now accepts runtime_factory for creating FinancesSimulatorRuntime, which contains logic with possibly mutable elements, such as investment manager, income callable and annual costs callable
