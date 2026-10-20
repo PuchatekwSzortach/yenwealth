@@ -23,6 +23,27 @@ class TestAsset:
         assert asset.gain == decimal.Decimal("41.25")
         assert asset.value == decimal.Decimal(110)
 
+    def test_sell_with_negative_gain(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(-20),
+            annual_management_cost_rate=decimal.Decimal(0)
+        )
+
+        assert asset.value == decimal.Decimal(80)
+
+        asset.sell(decimal.Decimal(40))
+
+        assert asset.value == decimal.Decimal(40)
+
+        # Since we want to sell 40 units of the asset, and gain represents -25% of asset value,
+        # gain should be decreased by (40 * -25%) or -10, meaning gain changes from -20 to -10.
+        # And thus we need 50 units to come out of the principal, so principal goes from 100 to 50.
+        assert asset.gain == decimal.Decimal(-10)
+        assert asset.principal == decimal.Decimal(50)
+
     def test_advance_one_year(self):
 
         asset = yenwealth.investments.Asset(
@@ -39,6 +60,25 @@ class TestAsset:
         assert asset.value == decimal.Decimal(168)
         assert asset.principal == decimal.Decimal(100)
         assert asset.gain == decimal.Decimal(68)
+
+    def test_advance_one_year_with_negative_gain(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(-20),
+            annual_management_cost_rate=decimal.Decimal("0.1")
+        )
+
+        assert asset.value == decimal.Decimal(80)
+
+        asset.advance_one_year(change_rate=decimal.Decimal("0.15"))
+
+        assert asset.principal == decimal.Decimal(100)
+
+        # Gain grows like this: -20 + (80 * (0.15 - 0.1) = -20 + 8 = -16
+        assert asset.gain == decimal.Decimal(-16)
+        assert asset.value == decimal.Decimal(84)
 
     def test_buy(self):
 
