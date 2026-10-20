@@ -209,7 +209,8 @@ class OrdinaryInvestmentAccount:
             asset.advance_one_year(investment_returns[name])
 
     def _get_net_asset_value(self, asset: Asset) -> decimal.Decimal:
-        return asset.value - (asset.gain * self.capital_gain_tax_rate)
+        taxable_gain = max(asset.gain, decimal.Decimal(0))
+        return asset.value - (taxable_gain * self.capital_gain_tax_rate)
 
     @property
     def _asset_to_net_value_map(self) -> dict[str, decimal.Decimal]:
@@ -233,7 +234,8 @@ class OrdinaryInvestmentAccount:
         for name, net_sale in net_cash_withdrawals.items():
 
             asset = self.asset_map[name]
-            gain_ratio = asset.gain / asset.value
+            taxable_gain = max(asset.gain, decimal.Decimal(0))
+            gain_ratio = taxable_gain / asset.value
             net_proceeds_ratio = 1 - (gain_ratio * self.capital_gain_tax_rate)
             gross_sale = net_sale / net_proceeds_ratio
 
