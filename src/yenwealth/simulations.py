@@ -2,7 +2,6 @@
 Module with simulation logic
 """
 
-import copy
 import dataclasses
 import decimal
 import itertools
@@ -236,7 +235,7 @@ class FinancesSimulator:
 class MonteCarloSimulatorInputs:
 
     parameters: MonteCarloSimulatorParameters
-    runtime: FinancesSimulatorRuntime
+    runtime_factory: typing.Callable[[], FinancesSimulatorRuntime]
     historical_economic_data: core.EconomicData
 
 
@@ -260,11 +259,7 @@ def _run_single_simulation(
             simulation_end_age=inputs.parameters.simulation_end_age,
             simulation_start_year=inputs.parameters.simulation_start_year
         ),
-        runtime=FinancesSimulatorRuntime(
-            investment_manager=copy.deepcopy(inputs.runtime.investment_manager),
-            earned_annual_income_callable=copy.deepcopy(inputs.runtime.earned_annual_income_callable),
-            annual_costs_callable=copy.deepcopy(inputs.runtime.annual_costs_callable)
-        ),
+        runtime=inputs.runtime_factory(),
         simulated_economic_data=simulated_economic_data
     )
 

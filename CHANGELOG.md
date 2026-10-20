@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.5.1
+- improved - split fields of FinancesSimulatorInputs and MonteCarloSimulatorInputs into smaller, more focused classes
+- improved - MonteCarloSimulatorInputs now accepts runtime_factory for creating FinancesSimulatorRuntime, which contains logic with possibly mutable elements, such as investment manager, income callable and annual costs callable
+
 ### 0.5.0
 - added - added MonteCarloSimulator for running multiple financial simulations
 - added - added SimulationAnalyzer that allows to check how many simulations hit target goals
