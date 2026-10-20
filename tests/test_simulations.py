@@ -123,6 +123,53 @@ def test_monte_carlo_parameters_validate_simulation_count():
         )
 
 
+def test_monte_carlo_runtime_factory_creates_runtime_for_each_simulation(sample_economic_data):
+
+    runtimes = []
+    historical_economic_data = yenwealth.core.EconomicData(
+        return_on_assets_over_time=sample_economic_data.return_on_assets_over_time,
+        inflation_over_time=pandas.DataFrame(
+            {"inflation_rate": [0.02] * len(sample_economic_data.inflation_over_time)},
+            index=sample_economic_data.inflation_over_time.index
+        )
+    )
+
+    def runtime_factory():
+        runtime = yenwealth.simulations.FinancesSimulatorRuntime(
+            annual_costs_callable=lambda age: decimal.Decimal(0),
+            earned_annual_income_callable=lambda age: decimal.Decimal(0),
+            investment_manager=FakeInvestmentManager(
+                portfolio_value=decimal.Decimal(100),
+                after_tax_portfolio_value=decimal.Decimal(100),
+                simulation_start_year=2026
+            )
+        )
+        runtimes.append(runtime)
+        return runtime
+
+    simulation_count = 3
+    inputs = yenwealth.simulations.MonteCarloSimulatorInputs(
+        parameters=yenwealth.simulations.MonteCarloSimulatorParameters(
+            simulation_start_age=50,
+            simulation_end_age=50,
+            simulation_start_year=2026,
+            simulation_count=simulation_count
+        ),
+        runtime_factory=runtime_factory,
+        historical_economic_data=historical_economic_data
+    )
+
+    economic_data_simulator = yenwealth.simulations.EconomicDataSimulator(historical_economic_data)
+    results = [
+        yenwealth.simulations._run_single_simulation(inputs, economic_data_simulator, simulation_index)
+        for simulation_index in range(simulation_count)
+    ]
+
+    assert len(results) == simulation_count
+    assert len(runtimes) == simulation_count
+    assert len({id(runtime) for runtime in runtimes}) == simulation_count
+
+
 def test_simulation_contains_initial_state():
 
     investment_manager = FakeInvestmentManager(
