@@ -1,5 +1,8 @@
 # Changelog
 
+### 0.5.3
+- improved - SimpleInvestmentManager now validates all assets in accounts passed to it are accounted for in investment policies
+
 ### 0.5.2
 - improved - OrdinaryInvestmentAccount.withdraw method now doesn't treat selling asset with negative gain as tax benefit, instead assuming no tax benefits from such transaction.
 

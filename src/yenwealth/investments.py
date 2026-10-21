@@ -74,6 +74,10 @@ class Asset:
 @beartype.beartype
 class DepositStrategy(typing.Protocol):
 
+    @property
+    def asset_names(self) -> set[str]:
+        ...
+
     def allocate(
         self,
         amount: decimal.Decimal,
@@ -90,6 +94,10 @@ class ProportionalDepositStrategy(DepositStrategy):
             raise ValueError("At least one asset name must be provided")
 
         self.weights = weights
+
+    @property
+    def asset_names(self) -> set[str]:
+        return set(self.weights)
 
     def allocate(self, amount: decimal.Decimal, assets: list[str]) -> dict[str, decimal.Decimal]:
 
@@ -118,6 +126,10 @@ class ProportionalDepositStrategy(DepositStrategy):
 @beartype.beartype
 class WithdrawStrategy(typing.Protocol):
 
+    @property
+    def asset_names(self) -> set[str]:
+        ...
+
     def calculate_withdrawal_amounts(
         self,
         amount: decimal.Decimal,
@@ -134,6 +146,10 @@ class SequentialWithdrawStrategy(WithdrawStrategy):
             raise ValueError("At least one asset name must be provided")
 
         self.withdraw_order = withdraw_order
+
+    @property
+    def asset_names(self) -> set[str]:
+        return set(self.withdraw_order)
 
     def calculate_withdrawal_amounts(
         self,
@@ -619,7 +635,56 @@ class SimpleInvestmentManager:
         self.simulation_start_age = simulation_start_age
         self.simulation_start_year = simulation_start_year
 
+        self._validate_account_assets_match_investment_policy()
+
         self.current_year = simulation_start_year
+
+    def _validate_account_assets_match_investment_policy(self) -> None:
+
+        account_asset_names = {
+            "ordinary_investment_account": (
+                set(self.ordinary_investment_account.asset_map),
+                {
+                    "ordinary_account_deposit_strategy": self.investment_policy.ordinary_account_deposit_strategy,
+                    "ordinary_account_withdraw_strategy": self.investment_policy.ordinary_account_withdraw_strategy,
+                }
+            ),
+            "ideco_investment_account": (
+                set(self.ideco_investment_account.asset_map),
+                {
+                    "ideco_account_deposit_strategy": self.investment_policy.ideco_account_deposit_strategy,
+                    "ideco_account_withdraw_strategy": self.investment_policy.ideco_account_withdraw_strategy,
+                }
+            ),
+            "old_nisa_account": (
+                {
+                    name
+                    for asset_map in self.old_nisa_account.year_to_asset_map.values()
+                    for name in asset_map
+                },
+                {
+                    "old_nisa_account_withdraw_strategy": self.investment_policy.old_nisa_account_withdraw_strategy,
+                }
+            ),
+            "nisa_account": (
+                set(self.nisa_account.asset_map),
+                {
+                    "nisa_account_deposit_strategy": self.investment_policy.nisa_account_deposit_strategy,
+                    "nisa_account_withdraw_strategy": self.investment_policy.nisa_account_withdraw_strategy,
+                }
+            ),
+        }
+
+        for account_name, (account_assets, strategies) in account_asset_names.items():
+            for strategy_name, strategy in strategies.items():
+
+                policy_assets = set(strategy.asset_names)
+
+                if account_assets != policy_assets:
+                    raise ValueError(
+                        f"Asset names for {account_name} do not match {strategy_name}: "
+                        f"account assets {sorted(account_assets)}, policy assets {sorted(policy_assets)}"
+                    )
 
     @property
     def _current_age(self) -> int:
