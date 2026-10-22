@@ -145,9 +145,9 @@ def test_simulation_contains_initial_state():
     result = simulator.run_simulation()
 
     assert result.index[0] == 50
-    assert result["gross_portfolio_value"][50] == decimal.Decimal(123)
-    assert result["net_portfolio_value"][50] == decimal.Decimal(100)
-    assert result["cost_of_living"][50] == decimal.Decimal(100)
+    assert result.at[50, "gross_portfolio_value"] == decimal.Decimal(123)
+    assert result.at[50, "net_portfolio_value"] == decimal.Decimal(100)
+    assert result.at[50, "cost_of_living"] == decimal.Decimal(100)
 
 
 def test_simulation_runs_until_end_age():

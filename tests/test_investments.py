@@ -977,6 +977,228 @@ class TestInvestmentManager:
 
         return yenwealth.investments.SimpleInvestmentManager(**arguments)
 
+    def test_investment_policy_ordinary_strategies_default_to_none(self, investment_manager):
+
+        policy = yenwealth.investments.InvestmentPolicy(
+            ideco=investment_manager.investment_policy.ideco,
+            ideco_account_deposit_strategy=investment_manager.investment_policy.ideco_account_deposit_strategy,
+            ideco_account_withdraw_strategy=investment_manager.investment_policy.ideco_account_withdraw_strategy,
+            old_nisa_account_withdraw_strategy=investment_manager.investment_policy.old_nisa_account_withdraw_strategy,
+            nisa_account_deposit_strategy=investment_manager.investment_policy.nisa_account_deposit_strategy,
+            nisa_account_withdraw_strategy=investment_manager.investment_policy.nisa_account_withdraw_strategy,
+        )
+
+        assert policy.ordinary_account_deposit_strategy is None
+        assert policy.ordinary_account_withdraw_strategy is None
+
+    def test_init_allows_ordinary_account_and_strategies_to_be_omitted(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+            "ordinary_account_withdraw_strategy": None,
+        })
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            investment_policy=policy,
+        )
+
+        assert manager.ordinary_investment_account is None
+        assert manager.portfolio_value == decimal.Decimal(0)
+        assert manager.after_tax_portfolio_value == decimal.Decimal(0)
+        assert manager.get_portfolio_summary()["ordinary_investment_account"] == decimal.Decimal(0)
+
+    def test_init_rejects_ordinary_policy_without_an_account(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_withdraw_strategy": None,
+        })
+
+        with pytest.raises(ValueError, match="ordinary investment account is not configured"):
+            self.create_investment_manager(
+                investment_manager,
+                ordinary_investment_account=None,
+                investment_policy=policy,
+            )
+
+    def test_init_rejects_ordinary_account_without_both_policy_strategies(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+        })
+
+        with pytest.raises(ValueError, match="ordinary investment account is configured"):
+            self.create_investment_manager(
+                investment_manager,
+                investment_policy=policy,
+            )
+
+    def test_deposit_without_ordinary_account_uses_tax_advantaged_capacity(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+            "ordinary_account_withdraw_strategy": None,
+        })
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            investment_policy=policy,
+        )
+
+        manager.deposit(amount=decimal.Decimal(3_000_000), age=30)
+
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(276_000)
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(2_724_000)
+
+    def test_deposit_exceeding_tax_advantaged_limits_requires_ordinary_account(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+            "ordinary_account_withdraw_strategy": None,
+        })
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            investment_policy=policy,
+        )
+
+        with pytest.raises(ValueError, match="ordinary investment account is not configured"):
+            manager.deposit(amount=decimal.Decimal(5_000_000), age=30)
+
+    def test_withdraw_without_ordinary_account_uses_old_nisa_then_nisa(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+            "ordinary_account_withdraw_strategy": None,
+        })
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            investment_policy=policy,
+        )
+
+        manager.old_nisa_account.year_to_asset_map = {
+            2024: {
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(500_000),
+                    gain=decimal.Decimal(0),
+                    annual_management_cost_rate=decimal.Decimal(0),
+                )
+            }
+        }
+        manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
+
+        manager.withdraw(desired_cash=decimal.Decimal(2_000_000))
+
+        assert manager.old_nisa_account.portfolio_value == decimal.Decimal(0)
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(500_000)
+
+    def test_withdraw_without_ordinary_account_raises_when_funds_are_insufficient(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+            "ordinary_account_withdraw_strategy": None,
+        })
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            investment_policy=policy,
+        )
+
+        manager.old_nisa_account.year_to_asset_map[2024]["VOO"].principal = decimal.Decimal(500_000)
+        manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
+
+        with pytest.raises(yenwealth.investments.InsufficientFunds, match="Not enough funds"):
+            manager.withdraw(desired_cash=decimal.Decimal(3_000_000))
+
+    def test_advance_one_year_without_ordinary_account(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+            "ordinary_account_withdraw_strategy": None,
+        })
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            investment_policy=policy,
+        )
+
+        manager.advance_one_year({"VOO": decimal.Decimal("0.05")})
+
+        assert manager.current_year == 2025
+
+    def test_optimize_investments_skips_ordinary_account_when_absent(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+            "ordinary_account_withdraw_strategy": None,
+        })
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            investment_policy=policy,
+        )
+
+        manager.optimize_investments()
+
+        assert manager.ordinary_investment_account is None
+
+    def test_optimize_expired_old_nisa_requires_ordinary_account(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+            "ordinary_account_withdraw_strategy": None,
+        })
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            investment_policy=policy,
+        )
+
+        manager.old_nisa_account.year_to_asset_map = {
+            2024: {
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(1_000_000),
+                    gain=decimal.Decimal(0),
+                    annual_management_cost_rate=decimal.Decimal(0),
+                )
+            }
+        }
+        manager.current_year = 2044
+
+        with pytest.raises(ValueError, match="ordinary investment account is not configured"):
+            manager.optimize_investments()
+
+        assert 2024 not in manager.old_nisa_account.year_to_asset_map
+
+    def test_optimize_ideco_lump_sum_requires_ordinary_account(self, investment_manager):
+
+        policy = investment_manager.investment_policy.model_copy(update={
+            "ordinary_account_deposit_strategy": None,
+            "ordinary_account_withdraw_strategy": None,
+        })
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            investment_policy=policy,
+        )
+        manager.ideco_investment_account.asset_map["VOO"].principal = decimal.Decimal(10_000_000)
+        manager.current_year = 2069
+
+        with pytest.raises(ValueError, match="ordinary investment account is not configured"):
+            manager.optimize_investments()
+
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(0)
+
     def test_init_rejects_account_asset_missing_from_policy(self, investment_manager):
 
         ordinary = yenwealth.investments.OrdinaryInvestmentAccount(
