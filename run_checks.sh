@@ -5,7 +5,7 @@ set -x
 pycodestyle ./src ./tests
 pytest
 ruff check .
-pyright
+python -m pyright --pythonpath "$(command -v python)"
 codespell .
 
 python examples/simple_simulation.py

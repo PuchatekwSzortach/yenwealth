@@ -573,8 +573,8 @@ class InvestmentPolicy(pydantic.BaseModel):
     old_nisa_account_withdraw_strategy: WithdrawStrategy
     nisa_account_deposit_strategy: DepositStrategy
     nisa_account_withdraw_strategy: WithdrawStrategy
-    ordinary_account_deposit_strategy: DepositStrategy
-    ordinary_account_withdraw_strategy: WithdrawStrategy
+    ordinary_account_deposit_strategy: DepositStrategy | None = None
+    ordinary_account_withdraw_strategy: WithdrawStrategy | None = None
 
 
 class InvestmentManager(typing.Protocol):
@@ -618,7 +618,8 @@ class SimpleInvestmentManager:
 
     def __init__(
         self,
-        ordinary_investment_account: OrdinaryInvestmentAccount,
+        *,
+        ordinary_investment_account: OrdinaryInvestmentAccount | None = None,
         ideco_investment_account: IdecoInvestmentAccount,
         old_nisa_account: OldNisaAccount,
         nisa_account: NisaAccount,
@@ -641,14 +642,45 @@ class SimpleInvestmentManager:
 
     def _validate_account_assets_match_investment_policy(self) -> None:
 
-        account_asset_names = {
-            "ordinary_investment_account": (
+        account_asset_names = {}
+
+        ordinary_strategies = {
+            "ordinary_account_deposit_strategy": self.investment_policy.ordinary_account_deposit_strategy,
+            "ordinary_account_withdraw_strategy": self.investment_policy.ordinary_account_withdraw_strategy,
+        }
+
+        if self.ordinary_investment_account is None:
+
+            configured_ordinary_strategies = {
+                strategy_name: strategy
+                for strategy_name, strategy in ordinary_strategies.items()
+                if strategy is not None
+            }
+
+            if configured_ordinary_strategies:
+                raise ValueError(
+                    "ordinary investment account is not configured, but its investment policy has strategies: "
+                    f"{sorted(configured_ordinary_strategies)}"
+                )
+        else:
+            missing_ordinary_strategies = [
+                strategy_name
+                for strategy_name, strategy in ordinary_strategies.items()
+                if strategy is None
+            ]
+
+            if missing_ordinary_strategies:
+                raise ValueError(
+                    "ordinary investment account is configured, but its investment policy is missing strategies: "
+                    f"{sorted(missing_ordinary_strategies)}"
+                )
+
+            account_asset_names["ordinary_investment_account"] = (
                 set(self.ordinary_investment_account.asset_map),
-                {
-                    "ordinary_account_deposit_strategy": self.investment_policy.ordinary_account_deposit_strategy,
-                    "ordinary_account_withdraw_strategy": self.investment_policy.ordinary_account_withdraw_strategy,
-                }
-            ),
+                ordinary_strategies,
+            )
+
+        account_asset_names.update({
             "ideco_investment_account": (
                 set(self.ideco_investment_account.asset_map),
                 {
@@ -673,10 +705,13 @@ class SimpleInvestmentManager:
                     "nisa_account_withdraw_strategy": self.investment_policy.nisa_account_withdraw_strategy,
                 }
             ),
-        }
+        })
 
         for account_name, (account_assets, strategies) in account_asset_names.items():
             for strategy_name, strategy in strategies.items():
+
+                if strategy is None:
+                    raise ValueError(f"Missing strategy {strategy_name} for {account_name}")
 
                 policy_assets = set(strategy.asset_names)
 
@@ -692,24 +727,29 @@ class SimpleInvestmentManager:
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
-        return \
-            self.ordinary_investment_account.portfolio_value + \
-            self.ideco_investment_account.portfolio_value + \
-            self.old_nisa_account.portfolio_value + \
-            self.nisa_account.portfolio_value
+        return (
+            (self.ordinary_investment_account.portfolio_value
+             if self.ordinary_investment_account is not None else decimal.Decimal(0))
+            + self.ideco_investment_account.portfolio_value
+            + self.old_nisa_account.portfolio_value
+            + self.nisa_account.portfolio_value
+        )
 
     @property
     def after_tax_portfolio_value(self) -> decimal.Decimal:
 
-        return \
-            self.ordinary_investment_account.max_cash_withdrawal + \
-            self.ideco_investment_account.portfolio_value + \
-            self.old_nisa_account.portfolio_value + \
-            self.nisa_account.portfolio_value
+        return (
+            (self.ordinary_investment_account.max_cash_withdrawal
+             if self.ordinary_investment_account is not None else decimal.Decimal(0))
+            + self.ideco_investment_account.portfolio_value
+            + self.old_nisa_account.portfolio_value
+            + self.nisa_account.portfolio_value
+        )
 
     def advance_one_year(self, investment_returns: dict):
 
-        self.ordinary_investment_account.advance_one_year(investment_returns)
+        if self.ordinary_investment_account is not None:
+            self.ordinary_investment_account.advance_one_year(investment_returns)
         self.ideco_investment_account.advance_one_year(investment_returns)
         self.old_nisa_account.advance_one_year(investment_returns, self.current_year)
         self.nisa_account.advance_one_year(investment_returns)
@@ -721,48 +761,62 @@ class SimpleInvestmentManager:
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
 
+        amount_to_deposit_to_ideco = decimal.Decimal(0)
+
         if age < self.ideco_investment_account.max_deposit_age:
 
             amount_to_deposit_to_ideco = min(amount, self.ideco_investment_account.max_annual_contribution)
 
-            if amount_to_deposit_to_ideco > 0:
-
-                self.ideco_investment_account.deposit(
-                    amount=amount_to_deposit_to_ideco,
-                    age=age,
-                    strategy=self.investment_policy.ideco_account_deposit_strategy
-                )
-
-                amount -= amount_to_deposit_to_ideco
-
-                LOGGER.debug(
-                    f"Deposited {utilities.format_million_yen(amount_to_deposit_to_ideco)} to iDeCo account")
+        amount_after_ideco = amount - amount_to_deposit_to_ideco
+        amount_to_deposit_to_nisa = decimal.Decimal(0)
 
         if self.nisa_account.principal < self.nisa_account.total_deposit_limit:
 
             amount_to_deposit_to_nisa = min(
                 self.nisa_account.total_deposit_limit - self.nisa_account.principal,
                 self.nisa_account.annual_deposit_limit - self.nisa_account.year_to_deposit_map[self.current_year],
-                amount
+                amount_after_ideco
             )
 
-            if amount_to_deposit_to_nisa > 0:
+        remaining_amount = amount_after_ideco - amount_to_deposit_to_nisa
 
-                self.nisa_account.deposit(
-                    amount_to_deposit_to_nisa,
-                    self.current_year,
-                    self.investment_policy.nisa_account_deposit_strategy
-                )
-                amount -= amount_to_deposit_to_nisa
+        if amount_to_deposit_to_ideco > 0:
 
-                LOGGER.debug(
-                    f"Deposited {utilities.format_million_yen(amount_to_deposit_to_nisa)} to NISA account")
-
-        if amount > 0:
-
-            self.ordinary_investment_account.deposit(amount, self.investment_policy.ordinary_account_deposit_strategy)
+            self.ideco_investment_account.deposit(
+                amount=amount_to_deposit_to_ideco,
+                age=age,
+                strategy=self.investment_policy.ideco_account_deposit_strategy
+            )
             LOGGER.debug(
-                f"Deposited {utilities.format_million_yen(amount)} to ordinary investment account")
+                f"Deposited {utilities.format_million_yen(amount_to_deposit_to_ideco)} to iDeCo account")
+
+        if amount_to_deposit_to_nisa > 0:
+
+            self.nisa_account.deposit(
+                amount_to_deposit_to_nisa,
+                self.current_year,
+                self.investment_policy.nisa_account_deposit_strategy
+            )
+            LOGGER.debug(
+                f"Deposited {utilities.format_million_yen(amount_to_deposit_to_nisa)} to NISA account")
+
+        if remaining_amount > 0:
+
+            if self.ordinary_investment_account is None:
+                raise ValueError(
+                    "Cannot deposit the remaining amount because ordinary investment account is not configured"
+                )
+            if self.investment_policy.ordinary_account_deposit_strategy is None:
+                raise ValueError(
+                    "Cannot deposit the remaining amount because ordinary account deposit strategy is not configured"
+                )
+
+            self.ordinary_investment_account.deposit(
+                remaining_amount,
+                self.investment_policy.ordinary_account_deposit_strategy
+            )
+            LOGGER.debug(
+                f"Deposited {utilities.format_million_yen(remaining_amount)} to ordinary investment account")
 
     def withdraw(self, desired_cash: decimal.Decimal):
 
@@ -774,18 +828,28 @@ class SimpleInvestmentManager:
         total_cash_withdrawn = decimal.Decimal(0)
 
         # Establish how much to withdraw from ordinary account
-        withdrawal_from_ordinary_account = min(
-            desired_cash - total_cash_withdrawn,
-            self.ordinary_investment_account.max_cash_withdrawal
-        ).quantize(constants.YEN, rounding=decimal.ROUND_DOWN)
+        withdrawal_from_ordinary_account = decimal.Decimal(0)
 
-        if withdrawal_from_ordinary_account > 0:
+        if self.ordinary_investment_account is not None:
 
-            self.ordinary_investment_account.withdraw(
-                withdrawal_from_ordinary_account,
-                self.investment_policy.ordinary_account_withdraw_strategy)
+            withdrawal_from_ordinary_account = min(
+                desired_cash - total_cash_withdrawn,
+                self.ordinary_investment_account.max_cash_withdrawal
+            ).quantize(constants.YEN, rounding=decimal.ROUND_DOWN)
 
-            total_cash_withdrawn += withdrawal_from_ordinary_account
+            if withdrawal_from_ordinary_account > 0:
+
+                if self.investment_policy.ordinary_account_withdraw_strategy is None:
+                    raise ValueError(
+                        "Cannot withdraw from ordinary investment account because ordinary account withdraw strategy "
+                        "is not configured"
+                    )
+
+                self.ordinary_investment_account.withdraw(
+                    withdrawal_from_ordinary_account,
+                    self.investment_policy.ordinary_account_withdraw_strategy)
+
+                total_cash_withdrawn += withdrawal_from_ordinary_account
 
         withdrawal_from_old_nisa = min(
             desired_cash - total_cash_withdrawn,
@@ -826,10 +890,23 @@ class SimpleInvestmentManager:
         # Check if any old nisa account portfolio has to be liquidated
         if (self.current_year - 20) in self.old_nisa_account.year_to_asset_map:
 
-            asset_map = self.old_nisa_account.year_to_asset_map.pop(self.current_year - 20)
+            expired_year = self.current_year - 20
+            asset_map = self.old_nisa_account.year_to_asset_map[expired_year]
             portfolio_value = decimal.Decimal(sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
 
+            self.old_nisa_account.year_to_asset_map.pop(expired_year)
+
             if portfolio_value > 0:
+
+                if self.ordinary_investment_account is None:
+                    raise ValueError(
+                        "Cannot deposit expired old NISA assets because ordinary investment account is not configured"
+                    )
+                if self.investment_policy.ordinary_account_deposit_strategy is None:
+                    raise ValueError(
+                        "Cannot deposit expired old NISA assets because ordinary account deposit strategy is not "
+                        "configured"
+                    )
 
                 self.ordinary_investment_account.deposit(
                     portfolio_value,
@@ -850,6 +927,17 @@ class SimpleInvestmentManager:
 
             if tax_free_lump_sum > 0:
 
+                if self.ordinary_investment_account is None:
+                    raise ValueError(
+                        "Cannot deposit the iDeCo tax-free lump sum because ordinary investment account is not "
+                        "configured"
+                    )
+                if self.investment_policy.ordinary_account_deposit_strategy is None:
+                    raise ValueError(
+                        "Cannot deposit the iDeCo tax-free lump sum because ordinary account deposit strategy is not "
+                        "configured"
+                    )
+
                 self.ordinary_investment_account.deposit(
                     tax_free_lump_sum,
                     self.investment_policy.ordinary_account_deposit_strategy)
@@ -858,35 +946,49 @@ class SimpleInvestmentManager:
                     f"Withdrew tax-free lump sum of {utilities.format_million_yen(tax_free_lump_sum)} "
                     "from iDeCo account")
 
-        if self.nisa_account.principal < self.nisa_account.total_deposit_limit:
+        if self.ordinary_investment_account is not None:
 
-            amount_to_move_from_ordinaly_account_to_nisa = min(
-                self.nisa_account.total_deposit_limit - self.nisa_account.principal,
-                self.nisa_account.annual_deposit_limit,
-                self.ordinary_investment_account.max_cash_withdrawal
-            )
-
-            if amount_to_move_from_ordinaly_account_to_nisa > 0:
-
-                self.ordinary_investment_account.withdraw(
-                    amount_to_move_from_ordinaly_account_to_nisa,
-                    self.investment_policy.ordinary_account_withdraw_strategy)
-
-                self.nisa_account.deposit(
-                    amount_to_move_from_ordinaly_account_to_nisa,
-                    self.current_year,
-                    self.investment_policy.nisa_account_deposit_strategy
+            if self.investment_policy.ordinary_account_withdraw_strategy is None:
+                raise ValueError(
+                    "Cannot optimize investments because ordinary account withdraw strategy is not configured"
+                )
+            if self.investment_policy.ordinary_account_deposit_strategy is None:
+                raise ValueError(
+                    "Cannot optimize investments because ordinary account deposit strategy is not configured"
                 )
 
-                LOGGER.debug(
-                    f"Moved {utilities.format_million_yen(amount_to_move_from_ordinaly_account_to_nisa)} "
-                    "from ordinary investment account to NISA account"
+            if self.nisa_account.principal < self.nisa_account.total_deposit_limit:
+
+                amount_to_move_from_ordinaly_account_to_nisa = min(
+                    self.nisa_account.total_deposit_limit - self.nisa_account.principal,
+                    self.nisa_account.annual_deposit_limit,
+                    self.ordinary_investment_account.max_cash_withdrawal
                 )
+
+                if amount_to_move_from_ordinaly_account_to_nisa > 0:
+
+                    self.ordinary_investment_account.withdraw(
+                        amount_to_move_from_ordinaly_account_to_nisa,
+                        self.investment_policy.ordinary_account_withdraw_strategy)
+
+                    self.nisa_account.deposit(
+                        amount_to_move_from_ordinaly_account_to_nisa,
+                        self.current_year,
+                        self.investment_policy.nisa_account_deposit_strategy
+                    )
+
+                    LOGGER.debug(
+                        f"Moved {utilities.format_million_yen(amount_to_move_from_ordinaly_account_to_nisa)} "
+                        "from ordinary investment account to NISA account"
+                    )
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
 
         return {
-            "ordinary_investment_account": self.ordinary_investment_account.portfolio_value,
+            "ordinary_investment_account": (
+                self.ordinary_investment_account.portfolio_value
+                if self.ordinary_investment_account is not None else decimal.Decimal(0)
+            ),
             "ideco_investment_account": self.ideco_investment_account.portfolio_value,
             "old_nisa_account": self.old_nisa_account.portfolio_value,
             "nisa_account": self.nisa_account.portfolio_value,
