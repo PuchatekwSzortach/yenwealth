@@ -138,6 +138,24 @@ class WithdrawStrategy(typing.Protocol):
         ...
 
 
+def _validate_strategy_asset_names(
+    account_name: str,
+    account_asset_names: typing.Collection[str],
+    strategies: dict[str, DepositStrategy | WithdrawStrategy]
+) -> None:
+
+    account_asset_names = set(account_asset_names)
+
+    for strategy_name, strategy in strategies.items():
+        strategy_asset_names = set(strategy.asset_names)
+
+        if account_asset_names != strategy_asset_names:
+            raise ValueError(
+                f"Asset names for {account_name} do not match {strategy_name}: "
+                f"account assets {sorted(account_asset_names)}, strategy assets {sorted(strategy_asset_names)}"
+            )
+
+
 class SequentialWithdrawStrategy(WithdrawStrategy):
 
     def __init__(self, withdraw_order: list[str]):
@@ -204,15 +222,14 @@ class OrdinaryInvestmentAccount:
         self.deposit_strategy = deposit_strategy
         self.withdrawal_strategy = withdrawal_strategy
 
-        for strategy_name, strategy in {
-            "deposit_strategy": self.deposit_strategy,
-            "withdrawal_strategy": self.withdrawal_strategy,
-        }.items():
-            if set(self.asset_map) != strategy.asset_names:
-                raise ValueError(
-                    f"Asset names for ordinary investment account do not match {strategy_name}: "
-                    f"account assets {sorted(self.asset_map)}, strategy assets {sorted(strategy.asset_names)}"
-                )
+        _validate_strategy_asset_names(
+            account_name="ordinary investment account",
+            account_asset_names=self.asset_map,
+            strategies={
+                "deposit_strategy": self.deposit_strategy,
+                "withdrawal_strategy": self.withdrawal_strategy,
+            }
+        )
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
@@ -294,15 +311,14 @@ class IdecoInvestmentAccount:
         self.deposit_strategy = deposit_strategy
         self.withdrawal_strategy = withdrawal_strategy
 
-        for strategy_name, strategy in {
-            "deposit_strategy": self.deposit_strategy,
-            "withdrawal_strategy": self.withdrawal_strategy,
-        }.items():
-            if set(self.asset_map) != strategy.asset_names:
-                raise ValueError(
-                    f"Asset names for ideco investment account do not match {strategy_name}: "
-                    f"account assets {sorted(self.asset_map)}, strategy assets {sorted(strategy.asset_names)}"
-                )
+        _validate_strategy_asset_names(
+            account_name="ideco investment account",
+            account_asset_names=self.asset_map,
+            strategies={
+                "deposit_strategy": self.deposit_strategy,
+                "withdrawal_strategy": self.withdrawal_strategy,
+            }
+        )
 
         self.max_annual_contribution = decimal.Decimal("0.276") * constants.MILLION
         self.max_deposit_age = 65
@@ -423,9 +439,24 @@ class OldNisaAccount:
     from when they were made.
     """
 
-    def __init__(self, year_to_asset_map: dict[int, dict[str, Asset]]):
+    def __init__(
+        self,
+        year_to_asset_map: dict[int, dict[str, Asset]],
+        withdrawal_strategy: WithdrawStrategy
+    ):
 
         self.year_to_asset_map = copy.deepcopy(year_to_asset_map)
+        self.withdrawal_strategy = withdrawal_strategy
+
+        _validate_strategy_asset_names(
+            account_name="old nisa account",
+            account_asset_names={
+                name
+                for asset_map in self.year_to_asset_map.values()
+                for name in asset_map
+            },
+            strategies={"withdrawal_strategy": self.withdrawal_strategy}
+        )
 
     def advance_one_year(self, investment_returns: dict[str, decimal.Decimal], year: int):
 
@@ -450,8 +481,7 @@ class OldNisaAccount:
     def withdraw_for_year(
         self,
         portfolio_year: int,
-        desired_cash: decimal.Decimal,
-        strategy: WithdrawStrategy
+        desired_cash: decimal.Decimal
     ):
         """
         Withdraw from portfolio established on portfolio_year
@@ -463,7 +493,7 @@ class OldNisaAccount:
         if portfolio_value < desired_cash:
             raise ValueError(f"Portfolio value for {portfolio_year} is not large enough")
 
-        withdrawals = strategy.calculate_withdrawal_amounts(
+        withdrawals = self.withdrawal_strategy.calculate_withdrawal_amounts(
             amount=desired_cash,
             asset_map={name: asset.value for name, asset in asset_map.items()}
         )
@@ -471,7 +501,7 @@ class OldNisaAccount:
         for name, withdrawal in withdrawals.items():
             asset_map[name].sell(withdrawal)
 
-    def withdraw(self, desired_cash: decimal.Decimal, strategy: WithdrawStrategy):
+    def withdraw(self, desired_cash: decimal.Decimal):
         """
         Withdraw from portfolio in order of oldest to newest
         """
@@ -495,8 +525,7 @@ class OldNisaAccount:
 
             self.withdraw_for_year(
                 portfolio_year=investment_year,
-                desired_cash=withdrawal_from_year,
-                strategy=strategy
+                desired_cash=withdrawal_from_year
             )
             total_withdrawal += withdrawal_from_year
 
@@ -512,12 +541,25 @@ class NisaAccount:
 
     def __init__(
         self,
-        asset_map: dict[str, Asset]
+        asset_map: dict[str, Asset],
+        deposit_strategy: DepositStrategy,
+        withdrawal_strategy: WithdrawStrategy
     ):
 
         self.annual_deposit_limit = decimal.Decimal("3.6") * constants.MILLION
         self.total_deposit_limit = decimal.Decimal(18) * constants.MILLION
         self.asset_map = asset_map
+        self.deposit_strategy = deposit_strategy
+        self.withdrawal_strategy = withdrawal_strategy
+
+        _validate_strategy_asset_names(
+            account_name="nisa account",
+            account_asset_names=self.asset_map,
+            strategies={
+                "deposit_strategy": self.deposit_strategy,
+                "withdrawal_strategy": self.withdrawal_strategy,
+            }
+        )
 
         if self.principal > self.total_deposit_limit:
             raise ValueError(f"Principal {self.principal} exceeds total deposit limit of {self.total_deposit_limit}")
@@ -534,7 +576,7 @@ class NisaAccount:
             sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
         ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
-    def deposit(self, amount: decimal.Decimal, year: int, strategy: DepositStrategy):
+    def deposit(self, amount: decimal.Decimal, year: int):
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -553,7 +595,7 @@ class NisaAccount:
             )
             raise ValueError(message)
 
-        allocations = strategy.allocate(
+        allocations = self.deposit_strategy.allocate(
             amount=amount,
             assets=list(self.asset_map.keys())
         )
@@ -568,7 +610,7 @@ class NisaAccount:
         for name, asset in self.asset_map.items():
             asset.advance_one_year(investment_returns[name])
 
-    def withdraw(self, desired_cash: decimal.Decimal, strategy: WithdrawStrategy):
+    def withdraw(self, desired_cash: decimal.Decimal):
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
@@ -576,7 +618,7 @@ class NisaAccount:
         if desired_cash > self.portfolio_value:
             raise InsufficientFunds(f"Withdrawal value {desired_cash} exceeds portfolio value {self.portfolio_value}")
 
-        withdrawals = strategy.calculate_withdrawal_amounts(
+        withdrawals = self.withdrawal_strategy.calculate_withdrawal_amounts(
             amount=desired_cash,
             asset_map={name: asset.value for name, asset in self.asset_map.items()}
         )
@@ -592,13 +634,7 @@ class IdecoPolicy(pydantic.BaseModel):
 
 class InvestmentPolicy(pydantic.BaseModel):
 
-    # Needed to use protocol-based deposit and withdraw strategies
-    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
-
     ideco: IdecoPolicy
-    old_nisa_account_withdraw_strategy: WithdrawStrategy
-    nisa_account_deposit_strategy: DepositStrategy
-    nisa_account_withdraw_strategy: WithdrawStrategy
 
 
 class InvestmentManager(typing.Protocol):
@@ -660,45 +696,7 @@ class SimpleInvestmentManager:
         self.simulation_start_age = simulation_start_age
         self.simulation_start_year = simulation_start_year
 
-        self._validate_account_assets_match_investment_policy()
-
         self.current_year = simulation_start_year
-
-    def _validate_account_assets_match_investment_policy(self) -> None:
-
-        account_asset_names = {
-            "old_nisa_account": (
-                {
-                    name
-                    for asset_map in self.old_nisa_account.year_to_asset_map.values()
-                    for name in asset_map
-                },
-                {
-                    "old_nisa_account_withdraw_strategy": self.investment_policy.old_nisa_account_withdraw_strategy,
-                }
-            ),
-            "nisa_account": (
-                set(self.nisa_account.asset_map),
-                {
-                    "nisa_account_deposit_strategy": self.investment_policy.nisa_account_deposit_strategy,
-                    "nisa_account_withdraw_strategy": self.investment_policy.nisa_account_withdraw_strategy,
-                }
-            ),
-        }
-
-        for account_name, (account_assets, strategies) in account_asset_names.items():
-            for strategy_name, strategy in strategies.items():
-
-                if strategy is None:
-                    raise ValueError(f"Missing strategy {strategy_name} for {account_name}")
-
-                strategy_assets = set(strategy.asset_names)
-
-                if account_assets != strategy_assets:
-                    raise ValueError(
-                        f"Asset names for {account_name} do not match {strategy_name}: "
-                        f"account assets {sorted(account_assets)}, strategy assets {sorted(strategy_assets)}"
-                    )
 
     @property
     def _current_age(self) -> int:
@@ -773,8 +771,7 @@ class SimpleInvestmentManager:
 
             self.nisa_account.deposit(
                 amount_to_deposit_to_nisa,
-                self.current_year,
-                self.investment_policy.nisa_account_deposit_strategy
+                self.current_year
             )
             LOGGER.debug(
                 f"Deposited {utilities.format_million_yen(amount_to_deposit_to_nisa)} to NISA account")
@@ -825,8 +822,7 @@ class SimpleInvestmentManager:
         if withdrawal_from_old_nisa > 0:
 
             self.old_nisa_account.withdraw(
-                withdrawal_from_old_nisa,
-                self.investment_policy.old_nisa_account_withdraw_strategy
+                withdrawal_from_old_nisa
             )
             total_cash_withdrawn += withdrawal_from_old_nisa
 
@@ -839,8 +835,7 @@ class SimpleInvestmentManager:
         if withdrawal_from_nisa > 0:
 
             self.nisa_account.withdraw(
-                withdrawal_from_nisa,
-                self.investment_policy.nisa_account_withdraw_strategy
+                withdrawal_from_nisa
             )
             total_cash_withdrawn += withdrawal_from_nisa
 
@@ -911,8 +906,7 @@ class SimpleInvestmentManager:
 
                 self.nisa_account.deposit(
                     amount_to_move_from_ordinary_account_to_nisa,
-                    self.current_year,
-                    self.investment_policy.nisa_account_deposit_strategy
+                    self.current_year
                 )
 
                 LOGGER.debug(
