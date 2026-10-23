@@ -1169,10 +1169,10 @@ class TestNisaAccount:
             )
 
 
-class TestInvestmentManager:
+class TestSimpleInvestmentManager:
 
     @pytest.fixture
-    def investment_manager(self):
+    def investment_manager(self) -> yenwealth.investments.SimpleInvestmentManager:
 
         # 1. Ordinary Account: 0 principal, 0 gain, 0 tax for simple math
         ordinary = yenwealth.investments.OrdinaryInvestmentAccount(
@@ -1240,8 +1240,8 @@ class TestInvestmentManager:
         )
 
         # 5. Investment Policy: Withdrawal starts at age 75 for 20 years
-        policy = yenwealth.investments.InvestmentPolicy(
-            ideco=yenwealth.investments.IdecoPolicy(
+        investment_plan = yenwealth.investments.InvestmentPlan(
+            ideco_withdrawal_plan=yenwealth.investments.IdecoWithdrawalPlan(
                 withdrawal_start_age=75,
                 withdrawal_period_in_years=20
             )
@@ -1252,20 +1252,23 @@ class TestInvestmentManager:
             ideco_investment_account=ideco,
             old_nisa_account=old_nisa,
             nisa_account=nisa,
-            investment_policy=policy,
+            investment_plan=investment_plan,
             simulation_start_age=30,
             simulation_start_year=2024
         )
 
     @staticmethod
-    def create_investment_manager(manager, **overrides):
+    def create_investment_manager(
+        manager: yenwealth.investments.SimpleInvestmentManager,
+        **overrides
+    ) -> yenwealth.investments.SimpleInvestmentManager:
 
         arguments = {
             "ordinary_investment_account": manager.ordinary_investment_account,
             "ideco_investment_account": manager.ideco_investment_account,
             "old_nisa_account": manager.old_nisa_account,
             "nisa_account": manager.nisa_account,
-            "investment_policy": manager.investment_policy,
+            "investment_plan": manager.investment_plan,
             "simulation_start_age": manager.simulation_start_age,
             "simulation_start_year": manager.simulation_start_year,
         }
