@@ -627,14 +627,14 @@ class NisaAccount:
             self.asset_map[name].sell(withdrawal)
 
 
-class IdecoPolicy(pydantic.BaseModel):
+class IdecoWithdrawalPlan(pydantic.BaseModel):
     withdrawal_start_age: int
     withdrawal_period_in_years: int
 
 
-class InvestmentPolicy(pydantic.BaseModel):
+class InvestmentPlan(pydantic.BaseModel):
 
-    ideco: IdecoPolicy
+    ideco_withdrawal_plan: IdecoWithdrawalPlan
 
 
 class InvestmentManager(typing.Protocol):
@@ -683,7 +683,7 @@ class SimpleInvestmentManager:
         ideco_investment_account: IdecoInvestmentAccount,
         old_nisa_account: OldNisaAccount,
         nisa_account: NisaAccount,
-        investment_policy: InvestmentPolicy,
+        investment_plan: InvestmentPlan,
         simulation_start_age: int,
         simulation_start_year: int
     ):
@@ -692,7 +692,7 @@ class SimpleInvestmentManager:
         self.ideco_investment_account = ideco_investment_account
         self.old_nisa_account = old_nisa_account
         self.nisa_account = nisa_account
-        self.investment_policy = investment_policy
+        self.investment_plan = investment_plan
         self.simulation_start_age = simulation_start_age
         self.simulation_start_year = simulation_start_year
 
@@ -871,7 +871,7 @@ class SimpleInvestmentManager:
                 )
 
         # Check if we should do lump withdrawal from iDeCo
-        if self._current_age == self.investment_policy.ideco.withdrawal_start_age:
+        if self._current_age == self.investment_plan.ideco_withdrawal_plan.withdrawal_start_age:
 
             tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(
                 self.current_year

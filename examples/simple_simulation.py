@@ -25,8 +25,8 @@ def main():
     deposit_strategy = yenwealth.investments.ProportionalDepositStrategy(weights={"VOO": decimal.Decimal("1.0")})
     withdrawal_strategy = yenwealth.investments.SequentialWithdrawStrategy(withdraw_order=["VOO"])
 
-    investment_policy = yenwealth.investments.InvestmentPolicy(
-        ideco=yenwealth.investments.IdecoPolicy(
+    investment_plan = yenwealth.investments.InvestmentPlan(
+        ideco_withdrawal_plan=yenwealth.investments.IdecoWithdrawalPlan(
             withdrawal_start_age=65,
             withdrawal_period_in_years=20
         )
@@ -105,7 +105,7 @@ def main():
                     deposit_strategy=deposit_strategy,
                     withdrawal_strategy=withdrawal_strategy
                 ),
-                investment_policy=investment_policy,
+                investment_plan=investment_plan,
                 simulation_start_age=simulation_start_age,
                 simulation_start_year=simulation_start_year
             )
