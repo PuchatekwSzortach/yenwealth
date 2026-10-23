@@ -4,6 +4,7 @@ Module with investment logic
 
 import collections
 import copy
+import dataclasses
 import decimal
 import logging
 import typing
@@ -668,11 +669,40 @@ class InvestmentManager(typing.Protocol):
         ...
 
 
+type _ConfiguredInvestmentAccount = (
+    OrdinaryInvestmentAccount | IdecoInvestmentAccount | OldNisaAccount | NisaAccount
+)
+type _WithdrawableInvestmentAccount = (
+    OrdinaryInvestmentAccount | OldNisaAccount | NisaAccount
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class _DepositAction:
+    """Encapsulate a prioritized deposit operation for one account.
+
+    ``deposit_up_to`` performs the deposit and returns the amount deposited.
+    ``account_name`` is used in log messages.
+    """
+
+    deposit_up_to: typing.Callable[[decimal.Decimal], decimal.Decimal]
+    account_name: str
+
+
+@dataclasses.dataclass(frozen=True)
+class _WithdrawalSource:
+    """Describe an account's available cash and withdrawal priority."""
+
+    account: _WithdrawableInvestmentAccount
+    available_cash: decimal.Decimal
+    account_name: str
+
+
 class SimpleInvestmentManager:
     """
     Investment manager with a strategy that:
-    - prioritizes depositing into NISA before ordinary account
-    - prioritizes withdrawing from ordinary account before NISA
+    - prioritizes depositing into iDeCo, NISA, and then ordinary account
+    - prioritizes withdrawing from ordinary account, old NISA, and then NISA
     - withdraws half iDeCO funds at pension start time,
     """
 
@@ -680,7 +710,7 @@ class SimpleInvestmentManager:
         self,
         *,
         ordinary_investment_account: OrdinaryInvestmentAccount | None = None,
-        ideco_investment_account: IdecoInvestmentAccount,
+        ideco_investment_account: IdecoInvestmentAccount | None = None,
         old_nisa_account: OldNisaAccount,
         nisa_account: NisaAccount,
         investment_plan: InvestmentPlan,
@@ -703,34 +733,153 @@ class SimpleInvestmentManager:
         return self.simulation_start_age + self.current_year - self.simulation_start_year
 
     @property
+    def _configured_accounts(self) -> dict[str, _ConfiguredInvestmentAccount]:
+        """Return configured accounts in their stable portfolio order."""
+
+        return {
+            account_name: account
+            for account_name, account in (
+                ("ordinary_investment_account", self.ordinary_investment_account),
+                ("ideco_investment_account", self.ideco_investment_account),
+                ("old_nisa_account", self.old_nisa_account),
+                ("nisa_account", self.nisa_account),
+            )
+            if account is not None
+        }
+
+    def _build_deposit_actions(
+        self,
+        age: int,
+    ) -> list[_DepositAction]:
+        """Build deposit operations in account priority order.
+
+        Each action caps the requested amount according to the account's remaining
+        capacity, performs the deposit, and returns the deposited amount.
+        """
+
+        actions: list[_DepositAction] = []
+        ideco_account = self.ideco_investment_account
+
+        if ideco_account is not None and age < ideco_account.max_deposit_age:
+
+            def deposit_to_ideco(requested_amount: decimal.Decimal) -> decimal.Decimal:
+                amount = min(requested_amount, ideco_account.max_annual_contribution)
+                if amount > 0:
+                    ideco_account.deposit(amount, age=age)
+                return amount
+
+            actions.append(
+                _DepositAction(
+                    deposit_up_to=deposit_to_ideco,
+                    account_name="iDeCo",
+                )
+            )
+
+        nisa_account = self.nisa_account
+
+        if nisa_account is not None:
+
+            def deposit_to_nisa(requested_amount: decimal.Decimal) -> decimal.Decimal:
+
+                capacity = min(
+                    nisa_account.total_deposit_limit - nisa_account.principal,
+                    nisa_account.annual_deposit_limit
+                    - nisa_account.year_to_deposit_map[self.current_year],
+                )
+
+                amount = min(requested_amount, max(capacity, decimal.Decimal(0)))
+
+                if amount > 0:
+                    nisa_account.deposit(amount, year=self.current_year)
+
+                return amount
+
+            actions.append(
+                _DepositAction(
+                    deposit_up_to=deposit_to_nisa,
+                    account_name="NISA",
+                )
+            )
+
+        ordinary_account = self.ordinary_investment_account
+
+        if ordinary_account is not None:
+
+            def deposit_to_ordinary(requested_amount: decimal.Decimal) -> decimal.Decimal:
+                if requested_amount > 0:
+                    ordinary_account.deposit(requested_amount)
+                    return requested_amount
+                return decimal.Decimal(0)
+
+            actions.append(
+                _DepositAction(
+                    deposit_up_to=deposit_to_ordinary,
+                    account_name="ordinary investment",
+                )
+            )
+
+        return actions
+
+    def _build_withdrawal_sources(self) -> list[_WithdrawalSource]:
+        """Build withdrawal sources in account priority order."""
+
+        sources: list[_WithdrawalSource] = []
+
+        if self.ordinary_investment_account is not None:
+            sources.append(
+                _WithdrawalSource(
+                    account=self.ordinary_investment_account,
+                    available_cash=self.ordinary_investment_account.max_cash_withdrawal,
+                    account_name="ordinary investment",
+                )
+            )
+
+        if self.old_nisa_account is not None:
+            sources.append(
+                _WithdrawalSource(
+                    account=self.old_nisa_account,
+                    available_cash=self.old_nisa_account.portfolio_value,
+                    account_name="old NISA",
+                )
+            )
+
+        if self.nisa_account is not None:
+            sources.append(
+                _WithdrawalSource(
+                    account=self.nisa_account,
+                    available_cash=self.nisa_account.portfolio_value,
+                    account_name="NISA",
+                )
+            )
+
+        return sources
+
+    @property
     def portfolio_value(self) -> decimal.Decimal:
-        return (
-            (self.ordinary_investment_account.portfolio_value
-             if self.ordinary_investment_account is not None else decimal.Decimal(0))
-            + self.ideco_investment_account.portfolio_value
-            + self.old_nisa_account.portfolio_value
-            + self.nisa_account.portfolio_value
+        return sum(
+            (account.portfolio_value for account in self._configured_accounts.values()),
+            decimal.Decimal(0),
         )
 
     @property
     def after_tax_portfolio_value(self) -> decimal.Decimal:
-
-        return (
-            (self.ordinary_investment_account.max_cash_withdrawal
-             if self.ordinary_investment_account is not None else decimal.Decimal(0))
-            + self.ideco_investment_account.portfolio_value
-            + self.old_nisa_account.portfolio_value
-            + self.nisa_account.portfolio_value
+        return sum(
+            (
+                account.max_cash_withdrawal
+                if isinstance(account, OrdinaryInvestmentAccount)
+                else account.portfolio_value
+                for account in self._configured_accounts.values()
+            ),
+            decimal.Decimal(0),
         )
 
     def advance_one_year(self, investment_returns: dict):
 
-        if self.ordinary_investment_account is not None:
-            self.ordinary_investment_account.advance_one_year(investment_returns)
-
-        self.ideco_investment_account.advance_one_year(investment_returns)
-        self.old_nisa_account.advance_one_year(investment_returns, self.current_year)
-        self.nisa_account.advance_one_year(investment_returns)
+        for account in self._configured_accounts.values():
+            if isinstance(account, OldNisaAccount):
+                account.advance_one_year(investment_returns, self.current_year)
+            else:
+                account.advance_one_year(investment_returns)
 
         self.current_year += 1
 
@@ -739,54 +888,25 @@ class SimpleInvestmentManager:
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
 
-        amount_to_deposit_to_ideco = decimal.Decimal(0)
+        remaining_amount = amount
 
-        if age < self.ideco_investment_account.max_deposit_age:
+        for action in self._build_deposit_actions(age):
+            deposited_amount = action.deposit_up_to(remaining_amount)
 
-            amount_to_deposit_to_ideco = min(amount, self.ideco_investment_account.max_annual_contribution)
+            if deposited_amount > 0:
+                remaining_amount -= deposited_amount
 
-        amount_after_ideco = amount - amount_to_deposit_to_ideco
-        amount_to_deposit_to_nisa = decimal.Decimal(0)
+                LOGGER.debug(
+                    f"Deposited {utilities.format_million_yen(deposited_amount)} to {action.account_name} account")
 
-        if self.nisa_account.principal < self.nisa_account.total_deposit_limit:
-
-            amount_to_deposit_to_nisa = min(
-                self.nisa_account.total_deposit_limit - self.nisa_account.principal,
-                self.nisa_account.annual_deposit_limit - self.nisa_account.year_to_deposit_map[self.current_year],
-                amount_after_ideco
-            )
-
-        remaining_amount = amount_after_ideco - amount_to_deposit_to_nisa
-
-        if amount_to_deposit_to_ideco > 0:
-
-            self.ideco_investment_account.deposit(
-                amount=amount_to_deposit_to_ideco,
-                age=age
-            )
-            LOGGER.debug(
-                f"Deposited {utilities.format_million_yen(amount_to_deposit_to_ideco)} to iDeCo account")
-
-        if amount_to_deposit_to_nisa > 0:
-
-            self.nisa_account.deposit(
-                amount_to_deposit_to_nisa,
-                self.current_year
-            )
-            LOGGER.debug(
-                f"Deposited {utilities.format_million_yen(amount_to_deposit_to_nisa)} to NISA account")
+                if remaining_amount == 0:
+                    return
 
         if remaining_amount > 0:
-
-            if self.ordinary_investment_account is None:
-                raise ValueError(
-                    "Cannot deposit the remaining amount because ordinary investment account is not configured"
-                )
-
-            self.ordinary_investment_account.deposit(remaining_amount)
-
-            LOGGER.debug(
-                f"Deposited {utilities.format_million_yen(remaining_amount)} to ordinary investment account")
+            raise ValueError(
+                "Cannot deposit the remaining amount because ordinary investment account is not configured, "
+                "and deposit limits of other accounts were exhausted"
+            )
 
     def withdraw(self, desired_cash: decimal.Decimal):
 
@@ -795,51 +915,22 @@ class SimpleInvestmentManager:
         if desired_cash <= 0:
             raise ValueError(f"Withdrawal value should be positive, got {desired_cash}")
 
-        total_cash_withdrawn = decimal.Decimal(0)
+        remaining_cash = desired_cash
 
-        # Establish how much to withdraw from ordinary account
-        withdrawal_from_ordinary_account = decimal.Decimal(0)
+        for source in self._build_withdrawal_sources():
+            withdrawal = min(remaining_cash, source.available_cash)
 
-        if self.ordinary_investment_account is not None:
+            if withdrawal > 0:
+                source.account.withdraw(withdrawal)
+                remaining_cash -= withdrawal
 
-            withdrawal_from_ordinary_account = min(
-                desired_cash - total_cash_withdrawn,
-                self.ordinary_investment_account.max_cash_withdrawal
-            ).quantize(constants.YEN, rounding=decimal.ROUND_DOWN)
+                LOGGER.debug(
+                    f"Withdrew {utilities.format_million_yen(withdrawal)} from {source.account_name} account")
 
-            if withdrawal_from_ordinary_account > 0:
+                if remaining_cash == 0:
+                    return
 
-                self.ordinary_investment_account.withdraw(
-                    withdrawal_from_ordinary_account)
-
-                total_cash_withdrawn += withdrawal_from_ordinary_account
-
-        withdrawal_from_old_nisa = min(
-            desired_cash - total_cash_withdrawn,
-            self.old_nisa_account.portfolio_value
-        ).quantize(constants.YEN, rounding=decimal.ROUND_UP)
-
-        if withdrawal_from_old_nisa > 0:
-
-            self.old_nisa_account.withdraw(
-                withdrawal_from_old_nisa
-            )
-            total_cash_withdrawn += withdrawal_from_old_nisa
-
-        # Establish how much to withdraw from NISA
-        withdrawal_from_nisa = min(
-            desired_cash - total_cash_withdrawn,
-            self.nisa_account.portfolio_value
-        ).quantize(constants.YEN, rounding=decimal.ROUND_UP)
-
-        if withdrawal_from_nisa > 0:
-
-            self.nisa_account.withdraw(
-                withdrawal_from_nisa
-            )
-            total_cash_withdrawn += withdrawal_from_nisa
-
-        if total_cash_withdrawn < desired_cash:
+        if remaining_cash > 0:
 
             raise InsufficientFunds(f"Not enough funds to withdraw {desired_cash}")
 
@@ -849,7 +940,7 @@ class SimpleInvestmentManager:
         """
 
         # Check if any old nisa account portfolio has to be liquidated
-        if (self.current_year - 20) in self.old_nisa_account.year_to_asset_map:
+        if self.old_nisa_account is not None and (self.current_year - 20) in self.old_nisa_account.year_to_asset_map:
 
             expired_year = self.current_year - 20
             asset_map = self.old_nisa_account.year_to_asset_map[expired_year]
@@ -871,7 +962,10 @@ class SimpleInvestmentManager:
                 )
 
         # Check if we should do lump withdrawal from iDeCo
-        if self._current_age == self.investment_plan.ideco_withdrawal_plan.withdrawal_start_age:
+        if (
+            self.ideco_investment_account is not None
+            and self._current_age == self.investment_plan.ideco_withdrawal_plan.withdrawal_start_age
+        ):
 
             tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(
                 self.current_year
@@ -890,8 +984,11 @@ class SimpleInvestmentManager:
                     f"Withdrew tax-free lump sum of {utilities.format_million_yen(tax_free_lump_sum)} "
                     "from iDeCo account")
 
-        if (self.ordinary_investment_account is not None
-                and self.nisa_account.principal < self.nisa_account.total_deposit_limit):
+        if (
+            self.ordinary_investment_account is not None
+            and self.nisa_account is not None
+            and self.nisa_account.principal < self.nisa_account.total_deposit_limit
+        ):
 
             amount_to_move_from_ordinary_account_to_nisa = min(
                 self.nisa_account.total_deposit_limit - self.nisa_account.principal,
@@ -916,14 +1013,20 @@ class SimpleInvestmentManager:
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
 
+        account_values = {
+            account_name: account.portfolio_value
+            for account_name, account in self._configured_accounts.items()
+        }
+
         return {
-            "ordinary_investment_account": (
-                self.ordinary_investment_account.portfolio_value
-                if self.ordinary_investment_account is not None else decimal.Decimal(0)
+            "ordinary_investment_account": account_values.get(
+                "ordinary_investment_account", decimal.Decimal(0)
             ),
-            "ideco_investment_account": self.ideco_investment_account.portfolio_value,
-            "old_nisa_account": self.old_nisa_account.portfolio_value,
-            "nisa_account": self.nisa_account.portfolio_value,
+            "ideco_investment_account": account_values.get(
+                "ideco_investment_account", decimal.Decimal(0)
+            ),
+            "old_nisa_account": account_values.get("old_nisa_account", decimal.Decimal(0)),
+            "nisa_account": account_values.get("nisa_account", decimal.Decimal(0)),
             "total_portfolio_value": self.portfolio_value
         }
 
