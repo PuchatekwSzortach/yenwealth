@@ -34,9 +34,7 @@ def main():
         ideco_account_withdraw_strategy=withdrawal_strategy,
         old_nisa_account_withdraw_strategy=withdrawal_strategy,
         nisa_account_deposit_strategy=deposit_strategy,
-        nisa_account_withdraw_strategy=withdrawal_strategy,
-        ordinary_account_deposit_strategy=deposit_strategy,
-        ordinary_account_withdraw_strategy=withdrawal_strategy
+        nisa_account_withdraw_strategy=withdrawal_strategy
     )
 
     economic_data_index = range(
@@ -70,7 +68,9 @@ def main():
                             gain=decimal.Decimal(0),
                             annual_management_cost_rate=decimal.Decimal("0.001")
                         )
-                    }
+                    },
+                    deposit_strategy=deposit_strategy,
+                    withdrawal_strategy=withdrawal_strategy
                 ),
                 ideco_investment_account=yenwealth.investments.IdecoInvestmentAccount(
                     asset_map={

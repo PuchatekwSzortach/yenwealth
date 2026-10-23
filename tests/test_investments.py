@@ -98,6 +98,19 @@ class TestAsset:
         assert asset.value == decimal.Decimal(180)
 
 
+class TestInvestmentStrategy:
+
+    def test_strategies_expose_asset_names(self):
+
+        deposit_strategy = yenwealth.investments.ProportionalDepositStrategy(
+            weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(2)}
+        )
+        withdraw_strategy = yenwealth.investments.SequentialWithdrawStrategy(["VOO", "VGT"])
+
+        assert deposit_strategy.asset_names == {"VGT", "VOO"}
+        assert withdraw_strategy.asset_names == {"VGT", "VOO"}
+
+
 class TestProportionalDepositStrategy:
 
     def test_proportional_allocation(self):
@@ -221,12 +234,20 @@ class TestOrdinaryInvestmentAccount:
                     gain=decimal.Decimal(5),
                     annual_management_cost_rate=decimal.Decimal("0.1")
                 )
-            }
+            },
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         assert decimal.Decimal(40) == account.portfolio_value
 
     def test_deposit(self):
+
+        strategy = yenwealth.investments.ProportionalDepositStrategy(
+            weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(3)}
+        )
 
         account = yenwealth.investments.OrdinaryInvestmentAccount(
             asset_map={
@@ -242,14 +263,12 @@ class TestOrdinaryInvestmentAccount:
                     gain=decimal.Decimal(5),
                     annual_management_cost_rate=decimal.Decimal("0.1")
                 )
-            }
+            },
+            deposit_strategy=strategy,
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
-        strategy = yenwealth.investments.ProportionalDepositStrategy(
-            weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(3)}
-        )
-
-        account.deposit(amount=decimal.Decimal(10), strategy=strategy)
+        account.deposit(amount=decimal.Decimal(10))
 
         assert account.asset_map["VGT"].principal == decimal.Decimal("12.5")
         assert account.asset_map["VOO"].principal == decimal.Decimal("27.5")
@@ -270,7 +289,11 @@ class TestOrdinaryInvestmentAccount:
                     gain=decimal.Decimal(5),
                     annual_management_cost_rate=decimal.Decimal("0.1")
                 )
-            }
+            },
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         account.advance_one_year(
@@ -300,14 +323,17 @@ class TestOrdinaryInvestmentAccount:
                     annual_management_cost_rate=decimal.Decimal("0.1")
                 )
             },
-            capital_gain_tax_rate=decimal.Decimal("0.2")
+            capital_gain_tax_rate=decimal.Decimal("0.2"),
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         with pytest.raises(yenwealth.investments.InsufficientFunds):
 
             account.withdraw(
-                desired_cash=decimal.Decimal(50),
-                strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+                desired_cash=decimal.Decimal(50)
             )
 
     def test_withdraw_over_max_cash_withdrawal(self):
@@ -326,14 +352,17 @@ class TestOrdinaryInvestmentAccount:
                     gain=decimal.Decimal(5),
                     annual_management_cost_rate=decimal.Decimal("0.1")
                 )
-            }
+            },
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         with pytest.raises(yenwealth.investments.InsufficientFunds):
 
             account.withdraw(
-                desired_cash=account.max_cash_withdrawal + decimal.Decimal("0.5"),
-                strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+                desired_cash=account.max_cash_withdrawal + decimal.Decimal("0.5")
             )
 
     def test_withdraw(self):
@@ -353,14 +382,15 @@ class TestOrdinaryInvestmentAccount:
                     annual_management_cost_rate=decimal.Decimal("0.1")
                 )
             },
-            capital_gain_tax_rate=decimal.Decimal("0.5")
+            capital_gain_tax_rate=decimal.Decimal("0.5"),
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
-        strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
-
         account.withdraw(
-            desired_cash=decimal.Decimal(4400),
-            strategy=strategy
+            desired_cash=decimal.Decimal(4400)
         )
 
         # We would expect that with capital gain tax rate of 0.5, VGT asset can provide 1250 units
@@ -389,15 +419,18 @@ class TestOrdinaryInvestmentAccount:
                     annual_management_cost_rate=decimal.Decimal(0)
                 )
             },
-            capital_gain_tax_rate=decimal.Decimal("0.2")
+            capital_gain_tax_rate=decimal.Decimal("0.2"),
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT"])
         )
 
         assert account.portfolio_value == decimal.Decimal(80)
         assert account.max_cash_withdrawal == decimal.Decimal(80)
 
         account.withdraw(
-            desired_cash=decimal.Decimal(20),
-            strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT"])
+            desired_cash=decimal.Decimal(20)
         )
 
         assert account.asset_map["VGT"].principal == decimal.Decimal(75)
@@ -421,10 +454,77 @@ class TestOrdinaryInvestmentAccount:
                     annual_management_cost_rate=decimal.Decimal("0.1")
                 )
             },
-            capital_gain_tax_rate=decimal.Decimal("0.2")
+            capital_gain_tax_rate=decimal.Decimal("0.2"),
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         assert account.max_cash_withdrawal == decimal.Decimal(98)
+
+    def test_init_rejects_account_asset_missing_from_strategy(self):
+
+        with pytest.raises(ValueError, match="ordinary investment account"):
+            yenwealth.investments.OrdinaryInvestmentAccount(
+                asset_map={
+                    "VOO": yenwealth.investments.Asset(
+                        name="VOO",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    ),
+                    "VGT": yenwealth.investments.Asset(
+                        name="VGT",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    )
+                },
+                capital_gain_tax_rate=decimal.Decimal("0.20"),
+                deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                    weights={"VOO": decimal.Decimal(1)}
+                ),
+                withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
+            )
+
+    def test_init_rejects_strategy_asset_missing_from_account(self):
+
+        with pytest.raises(ValueError, match="deposit_strategy"):
+            yenwealth.investments.OrdinaryInvestmentAccount(
+                asset_map={
+                    "VOO": yenwealth.investments.Asset(
+                        name="VOO",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    )
+                },
+                capital_gain_tax_rate=decimal.Decimal("0.20"),
+                deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                    weights={"VOO": decimal.Decimal(1), "VGT": decimal.Decimal(1)}
+                ),
+                withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
+            )
+
+    def test_init_rejects_different_assets_between_account_strategies(self):
+
+        with pytest.raises(ValueError, match="withdrawal_strategy"):
+            yenwealth.investments.OrdinaryInvestmentAccount(
+                asset_map={
+                    "VOO": yenwealth.investments.Asset(
+                        name="VOO",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    )
+                },
+                capital_gain_tax_rate=decimal.Decimal("0.20"),
+                deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                    weights={"VOO": decimal.Decimal(1)}
+                ),
+                withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT"])
+            )
 
 
 class TestIdecoInvestmentAccount:
@@ -891,7 +991,11 @@ class TestInvestmentManager:
                     annual_management_cost_rate=decimal.Decimal(0)
                 )
             },
-            capital_gain_tax_rate=decimal.Decimal("0.20")
+            capital_gain_tax_rate=decimal.Decimal("0.20"),
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
         )
 
         # 2. iDeCo Account: 0 initial portfolio
@@ -945,10 +1049,7 @@ class TestInvestmentManager:
             old_nisa_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"]),
             nisa_account_deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
                 weights={"VOO": decimal.Decimal(1)}),
-            nisa_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"]),
-            ordinary_account_deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
-                weights={"VOO": decimal.Decimal(1)}),
-            ordinary_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
+            nisa_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
         )
 
         return yenwealth.investments.SimpleInvestmentManager(
@@ -977,31 +1078,11 @@ class TestInvestmentManager:
 
         return yenwealth.investments.SimpleInvestmentManager(**arguments)
 
-    def test_investment_policy_ordinary_strategies_default_to_none(self, investment_manager):
-
-        policy = yenwealth.investments.InvestmentPolicy(
-            ideco=investment_manager.investment_policy.ideco,
-            ideco_account_deposit_strategy=investment_manager.investment_policy.ideco_account_deposit_strategy,
-            ideco_account_withdraw_strategy=investment_manager.investment_policy.ideco_account_withdraw_strategy,
-            old_nisa_account_withdraw_strategy=investment_manager.investment_policy.old_nisa_account_withdraw_strategy,
-            nisa_account_deposit_strategy=investment_manager.investment_policy.nisa_account_deposit_strategy,
-            nisa_account_withdraw_strategy=investment_manager.investment_policy.nisa_account_withdraw_strategy,
-        )
-
-        assert policy.ordinary_account_deposit_strategy is None
-        assert policy.ordinary_account_withdraw_strategy is None
-
-    def test_init_allows_ordinary_account_and_strategies_to_be_omitted(self, investment_manager):
-
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-            "ordinary_account_withdraw_strategy": None,
-        })
+    def test_init_allows_ordinary_account_to_be_omitted(self, investment_manager):
 
         manager = self.create_investment_manager(
             investment_manager,
             ordinary_investment_account=None,
-            investment_policy=policy,
         )
 
         assert manager.ordinary_investment_account is None
@@ -1009,41 +1090,11 @@ class TestInvestmentManager:
         assert manager.after_tax_portfolio_value == decimal.Decimal(0)
         assert manager.get_portfolio_summary()["ordinary_investment_account"] == decimal.Decimal(0)
 
-    def test_init_rejects_ordinary_policy_without_an_account(self, investment_manager):
-
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_withdraw_strategy": None,
-        })
-
-        with pytest.raises(ValueError, match="ordinary investment account is not configured"):
-            self.create_investment_manager(
-                investment_manager,
-                ordinary_investment_account=None,
-                investment_policy=policy,
-            )
-
-    def test_init_rejects_ordinary_account_without_both_policy_strategies(self, investment_manager):
-
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-        })
-
-        with pytest.raises(ValueError, match="ordinary investment account is configured"):
-            self.create_investment_manager(
-                investment_manager,
-                investment_policy=policy,
-            )
-
     def test_deposit_without_ordinary_account_uses_tax_advantaged_capacity(self, investment_manager):
 
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-            "ordinary_account_withdraw_strategy": None,
-        })
         manager = self.create_investment_manager(
             investment_manager,
             ordinary_investment_account=None,
-            investment_policy=policy,
         )
 
         manager.deposit(amount=decimal.Decimal(3_000_000), age=30)
@@ -1053,14 +1104,9 @@ class TestInvestmentManager:
 
     def test_deposit_exceeding_tax_advantaged_limits_requires_ordinary_account(self, investment_manager):
 
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-            "ordinary_account_withdraw_strategy": None,
-        })
         manager = self.create_investment_manager(
             investment_manager,
             ordinary_investment_account=None,
-            investment_policy=policy,
         )
 
         with pytest.raises(ValueError, match="ordinary investment account is not configured"):
@@ -1068,15 +1114,9 @@ class TestInvestmentManager:
 
     def test_withdraw_without_ordinary_account_uses_old_nisa_then_nisa(self, investment_manager):
 
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-            "ordinary_account_withdraw_strategy": None,
-        })
-
         manager = self.create_investment_manager(
             investment_manager,
             ordinary_investment_account=None,
-            investment_policy=policy,
         )
 
         manager.old_nisa_account.year_to_asset_map = {
@@ -1098,15 +1138,9 @@ class TestInvestmentManager:
 
     def test_withdraw_without_ordinary_account_raises_when_funds_are_insufficient(self, investment_manager):
 
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-            "ordinary_account_withdraw_strategy": None,
-        })
-
         manager = self.create_investment_manager(
             investment_manager,
             ordinary_investment_account=None,
-            investment_policy=policy,
         )
 
         manager.old_nisa_account.year_to_asset_map[2024]["VOO"].principal = decimal.Decimal(500_000)
@@ -1117,15 +1151,9 @@ class TestInvestmentManager:
 
     def test_advance_one_year_without_ordinary_account(self, investment_manager):
 
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-            "ordinary_account_withdraw_strategy": None,
-        })
-
         manager = self.create_investment_manager(
             investment_manager,
             ordinary_investment_account=None,
-            investment_policy=policy,
         )
 
         manager.advance_one_year({"VOO": decimal.Decimal("0.05")})
@@ -1134,15 +1162,9 @@ class TestInvestmentManager:
 
     def test_optimize_investments_skips_ordinary_account_when_absent(self, investment_manager):
 
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-            "ordinary_account_withdraw_strategy": None,
-        })
-
         manager = self.create_investment_manager(
             investment_manager,
             ordinary_investment_account=None,
-            investment_policy=policy,
         )
 
         manager.optimize_investments()
@@ -1151,15 +1173,9 @@ class TestInvestmentManager:
 
     def test_optimize_expired_old_nisa_requires_ordinary_account(self, investment_manager):
 
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-            "ordinary_account_withdraw_strategy": None,
-        })
-
         manager = self.create_investment_manager(
             investment_manager,
             ordinary_investment_account=None,
-            investment_policy=policy,
         )
 
         manager.old_nisa_account.year_to_asset_map = {
@@ -1181,15 +1197,9 @@ class TestInvestmentManager:
 
     def test_optimize_ideco_lump_sum_requires_ordinary_account(self, investment_manager):
 
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": None,
-            "ordinary_account_withdraw_strategy": None,
-        })
-
         manager = self.create_investment_manager(
             investment_manager,
             ordinary_investment_account=None,
-            investment_policy=policy,
         )
         manager.ideco_investment_account.asset_map["VOO"].principal = decimal.Decimal(10_000_000)
         manager.current_year = 2069
@@ -1198,93 +1208,6 @@ class TestInvestmentManager:
             manager.optimize_investments()
 
         assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(0)
-
-    def test_init_rejects_account_asset_missing_from_policy(self, investment_manager):
-
-        ordinary = yenwealth.investments.OrdinaryInvestmentAccount(
-            asset_map={
-                "VOO": yenwealth.investments.Asset(
-                    name="VOO",
-                    principal=decimal.Decimal(0),
-                    gain=decimal.Decimal(0),
-                    annual_management_cost_rate=decimal.Decimal(0)
-                ),
-                "VGT": yenwealth.investments.Asset(
-                    name="VGT",
-                    principal=decimal.Decimal(0),
-                    gain=decimal.Decimal(0),
-                    annual_management_cost_rate=decimal.Decimal(0)
-                )
-            },
-            capital_gain_tax_rate=decimal.Decimal("0.20")
-        )
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": yenwealth.investments.ProportionalDepositStrategy(
-                weights={"VOO": decimal.Decimal(1)}
-            ),
-            "ordinary_account_withdraw_strategy": yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
-        })
-
-        with pytest.raises(ValueError, match="ordinary_investment_account"):
-            self.create_investment_manager(
-                investment_manager,
-                ordinary_investment_account=ordinary,
-                investment_policy=policy
-            )
-
-    def test_init_rejects_policy_asset_missing_from_account(self, investment_manager):
-
-        ordinary = yenwealth.investments.OrdinaryInvestmentAccount(
-            asset_map={
-                "VOO": yenwealth.investments.Asset(
-                    name="VOO",
-                    principal=decimal.Decimal(0),
-                    gain=decimal.Decimal(0),
-                    annual_management_cost_rate=decimal.Decimal(0)
-                )
-            },
-            capital_gain_tax_rate=decimal.Decimal("0.20")
-        )
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": yenwealth.investments.ProportionalDepositStrategy(
-                weights={"VOO": decimal.Decimal(1), "VGT": decimal.Decimal(1)}
-            ),
-            "ordinary_account_withdraw_strategy": yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
-        })
-
-        with pytest.raises(ValueError, match="ordinary_account_deposit_strategy"):
-            self.create_investment_manager(
-                investment_manager,
-                ordinary_investment_account=ordinary,
-                investment_policy=policy
-            )
-
-    def test_init_rejects_different_assets_between_account_strategies(self, investment_manager):
-
-        ordinary = yenwealth.investments.OrdinaryInvestmentAccount(
-            asset_map={
-                "VOO": yenwealth.investments.Asset(
-                    name="VOO",
-                    principal=decimal.Decimal(0),
-                    gain=decimal.Decimal(0),
-                    annual_management_cost_rate=decimal.Decimal(0)
-                )
-            },
-            capital_gain_tax_rate=decimal.Decimal("0.20")
-        )
-        policy = investment_manager.investment_policy.model_copy(update={
-            "ordinary_account_deposit_strategy": yenwealth.investments.ProportionalDepositStrategy(
-                weights={"VOO": decimal.Decimal(1)}
-            ),
-            "ordinary_account_withdraw_strategy": yenwealth.investments.SequentialWithdrawStrategy(["VGT"])
-        })
-
-        with pytest.raises(ValueError, match="ordinary_account_withdraw_strategy"):
-            self.create_investment_manager(
-                investment_manager,
-                ordinary_investment_account=ordinary,
-                investment_policy=policy
-            )
 
     def test_init_rejects_old_nisa_asset_missing_from_policy(self, investment_manager):
 
@@ -1318,16 +1241,6 @@ class TestInvestmentManager:
                 old_nisa_account=old_nisa,
                 investment_policy=policy
             )
-
-    def test_strategies_expose_asset_names(self):
-
-        deposit_strategy = yenwealth.investments.ProportionalDepositStrategy(
-            weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(2)}
-        )
-        withdraw_strategy = yenwealth.investments.SequentialWithdrawStrategy(["VOO", "VGT"])
-
-        assert deposit_strategy.asset_names == {"VGT", "VOO"}
-        assert withdraw_strategy.asset_names == {"VGT", "VOO"}
 
     def test_deposit_priority(self, investment_manager):
 
