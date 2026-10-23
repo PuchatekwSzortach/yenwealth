@@ -550,7 +550,11 @@ class TestIdecoInvestmentAccount:
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
-            contribution_start_year=2020
+            contribution_start_year=2020,
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         assert ideco.portfolio_value == decimal.Decimal(40)
@@ -559,15 +563,16 @@ class TestIdecoInvestmentAccount:
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
-            contribution_start_year=2020
+            contribution_start_year=2020,
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(3)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         ideco.deposit(
             amount=decimal.Decimal(10),
-            age=40,
-            strategy=yenwealth.investments.ProportionalDepositStrategy(
-                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(3)}
-            )
+            age=40
         )
 
         assert ideco.asset_map["VGT"].principal == decimal.Decimal("12.5")
@@ -577,7 +582,11 @@ class TestIdecoInvestmentAccount:
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
-            contribution_start_year=2020
+            contribution_start_year=2020,
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         ideco.advance_one_year(
@@ -594,14 +603,15 @@ class TestIdecoInvestmentAccount:
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
-            contribution_start_year=2020
+            contribution_start_year=2020,
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         with pytest.raises(ValueError):
-            ideco.withdraw_pension(
-                age=70,
-                strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
-            )
+            ideco.withdraw_pension(age=70)
 
     def test_withdrawing_pensions(self):
 
@@ -622,10 +632,12 @@ class TestIdecoInvestmentAccount:
                     annual_management_cost_rate=decimal.Decimal(0)
                 )
             },
-            contribution_start_year=2020
+            contribution_start_year=2020,
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
-
-        withdrawal_strategy = yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
 
         ideco.start_pension_scheme(
             start_age=70,
@@ -634,27 +646,27 @@ class TestIdecoInvestmentAccount:
 
         # First withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
-        amount = ideco.withdraw_pension(age=70, strategy=withdrawal_strategy)
+        amount = ideco.withdraw_pension(age=70)
         assert abs(amount - (portfolio_value_before_withdrawal / 5)) < decimal.Decimal("0.001")
 
         # Second withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
-        amount = ideco.withdraw_pension(age=71, strategy=withdrawal_strategy)
+        amount = ideco.withdraw_pension(age=71)
         assert abs(amount - (portfolio_value_before_withdrawal / 4)) < decimal.Decimal("0.001")
 
         # Third withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
-        amount = ideco.withdraw_pension(age=72, strategy=withdrawal_strategy)
+        amount = ideco.withdraw_pension(age=72)
         assert abs(amount - (portfolio_value_before_withdrawal / 3)) < decimal.Decimal("0.001")
 
         # # Fourth withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
-        amount = ideco.withdraw_pension(age=73, strategy=withdrawal_strategy)
+        amount = ideco.withdraw_pension(age=73)
         assert abs(amount - (portfolio_value_before_withdrawal / 2)) < decimal.Decimal("0.001")
 
         # Last withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
-        amount = ideco.withdraw_pension(age=74, strategy=withdrawal_strategy)
+        amount = ideco.withdraw_pension(age=74)
         assert abs(amount - portfolio_value_before_withdrawal) < decimal.Decimal("0.001")
 
         assert ideco.portfolio_value == decimal.Decimal(0)
@@ -663,7 +675,11 @@ class TestIdecoInvestmentAccount:
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
-            contribution_start_year=2020
+            contribution_start_year=2020,
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         # Before 20 year threshold
@@ -691,16 +707,94 @@ class TestIdecoInvestmentAccount:
                     annual_management_cost_rate=decimal.Decimal(0)
                 )
             },
-            contribution_start_year=2020
+            contribution_start_year=2020,
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
         )
 
         amount = ideco.withdraw_tax_free_lump_sum(
-            year=2022,
-            strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+            year=2022
         )
 
         assert amount == decimal.Decimal(30)
         assert ideco.portfolio_value == decimal.Decimal(0)
+
+    def test_init_rejects_account_asset_missing_from_strategy(self):
+
+        with pytest.raises(ValueError, match="ideco investment account"):
+            yenwealth.investments.IdecoInvestmentAccount(
+                asset_map={
+                    "VGT": yenwealth.investments.Asset(
+                        name="VGT",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    ),
+                    "VOO": yenwealth.investments.Asset(
+                        name="VOO",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    )
+                },
+                contribution_start_year=2020,
+                deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                    weights={"VGT": decimal.Decimal(1)}
+                ),
+                withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT"])
+            )
+
+    def test_init_rejects_strategy_asset_missing_from_account(self):
+
+        with pytest.raises(ValueError, match="deposit_strategy"):
+            yenwealth.investments.IdecoInvestmentAccount(
+                asset_map={
+                    "VGT": yenwealth.investments.Asset(
+                        name="VGT",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    ),
+                    "VOO": yenwealth.investments.Asset(
+                        name="VOO",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    )
+                },
+                contribution_start_year=2020,
+                deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                    weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1), "SPY": decimal.Decimal(1)}
+                ),
+                withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT", "VOO"])
+            )
+
+    def test_init_rejects_different_assets_between_account_strategies(self):
+
+        with pytest.raises(ValueError, match="withdrawal_strategy"):
+            yenwealth.investments.IdecoInvestmentAccount(
+                asset_map={
+                    "VGT": yenwealth.investments.Asset(
+                        name="VGT",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    ),
+                    "VOO": yenwealth.investments.Asset(
+                        name="VOO",
+                        principal=decimal.Decimal(0),
+                        gain=decimal.Decimal(0),
+                        annual_management_cost_rate=decimal.Decimal(0)
+                    )
+                },
+                contribution_start_year=2020,
+                deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                    weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+                ),
+                withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VGT"])
+            )
 
 
 class TestOldNisaAccount:
@@ -1008,7 +1102,11 @@ class TestInvestmentManager:
                     annual_management_cost_rate=decimal.Decimal(0)
                 )
             },
-            contribution_start_year=2020
+            contribution_start_year=2020,
+            deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
+                weights={"VOO": decimal.Decimal(1)}
+            ),
+            withdrawal_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"])
         )
 
         # 3. Old NISA Account: zero-value VOO portfolio
@@ -1043,9 +1141,6 @@ class TestInvestmentManager:
                 withdrawal_start_age=75,
                 withdrawal_period_in_years=20
             ),
-            ideco_account_deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
-                weights={"VOO": decimal.Decimal(1)}),
-            ideco_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"]),
             old_nisa_account_withdraw_strategy=yenwealth.investments.SequentialWithdrawStrategy(["VOO"]),
             nisa_account_deposit_strategy=yenwealth.investments.ProportionalDepositStrategy(
                 weights={"VOO": decimal.Decimal(1)}),
