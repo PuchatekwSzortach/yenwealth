@@ -30,10 +30,7 @@ def main():
         ideco=yenwealth.investments.IdecoPolicy(
             withdrawal_start_age=65,
             withdrawal_period_in_years=20
-        ),
-        old_nisa_account_withdraw_strategy=withdrawal_strategy,
-        nisa_account_deposit_strategy=deposit_strategy,
-        nisa_account_withdraw_strategy=withdrawal_strategy
+        )
     )
 
     economic_data_index = range(2000, 2020)
@@ -94,7 +91,8 @@ def main():
                                 annual_management_cost_rate=decimal.Decimal("0.001")
                             )
                         }
-                    }
+                    },
+                    withdrawal_strategy=withdrawal_strategy
                 ),
                 nisa_account=yenwealth.investments.NisaAccount(
                     asset_map={
@@ -104,7 +102,9 @@ def main():
                             gain=decimal.Decimal(0),
                             annual_management_cost_rate=decimal.Decimal("0.001")
                         )
-                    }
+                    },
+                    deposit_strategy=deposit_strategy,
+                    withdrawal_strategy=withdrawal_strategy
                 ),
                 investment_policy=investment_policy,
                 simulation_start_age=simulation_start_age,
