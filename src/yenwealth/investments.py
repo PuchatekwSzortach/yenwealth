@@ -711,7 +711,7 @@ class SimpleInvestmentManager:
         *,
         ordinary_investment_account: OrdinaryInvestmentAccount | None = None,
         ideco_investment_account: IdecoInvestmentAccount | None = None,
-        old_nisa_account: OldNisaAccount,
+        old_nisa_account: OldNisaAccount | None = None,
         nisa_account: NisaAccount,
         investment_plan: InvestmentPlan,
         simulation_start_age: int,
@@ -1019,15 +1019,8 @@ class SimpleInvestmentManager:
         }
 
         return {
-            "ordinary_investment_account": account_values.get(
-                "ordinary_investment_account", decimal.Decimal(0)
-            ),
-            "ideco_investment_account": account_values.get(
-                "ideco_investment_account", decimal.Decimal(0)
-            ),
-            "old_nisa_account": account_values.get("old_nisa_account", decimal.Decimal(0)),
-            "nisa_account": account_values.get("nisa_account", decimal.Decimal(0)),
-            "total_portfolio_value": self.portfolio_value
+            **account_values,
+            "total_portfolio_value": self.portfolio_value,
         }
 
     def get_formatted_portfolio_summary_description(self) -> str:
