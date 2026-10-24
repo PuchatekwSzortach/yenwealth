@@ -530,6 +530,13 @@ class TestOrdinaryInvestmentAccount:
 class TestIdecoInvestmentAccount:
 
     @staticmethod
+    def create_payout_plan():
+        return yenwealth.investments.IdecoPayoutPlan(
+            payout_start_age=75,
+            payout_period_in_years=20
+        )
+
+    @staticmethod
     def asset_map():
         return {
             "VGT": yenwealth.investments.Asset(
@@ -554,7 +561,8 @@ class TestIdecoInvestmentAccount:
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
-            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"])
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
+            ideco_payout_plan=self.create_payout_plan()
         )
 
         assert ideco.portfolio_value == decimal.Decimal(40)
@@ -567,7 +575,8 @@ class TestIdecoInvestmentAccount:
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(3)}
             ),
-            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"])
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
+            ideco_payout_plan=self.create_payout_plan()
         )
 
         ideco.deposit(
@@ -586,7 +595,8 @@ class TestIdecoInvestmentAccount:
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
-            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"])
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
+            ideco_payout_plan=self.create_payout_plan()
         )
 
         ideco.advance_one_year(
@@ -607,7 +617,8 @@ class TestIdecoInvestmentAccount:
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
-            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"])
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
+            ideco_payout_plan=self.create_payout_plan()
         )
 
         with pytest.raises(ValueError):
@@ -636,7 +647,8 @@ class TestIdecoInvestmentAccount:
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
-            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"])
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
+            ideco_payout_plan=self.create_payout_plan()
         )
 
         ideco.start_pension_scheme(
@@ -679,7 +691,8 @@ class TestIdecoInvestmentAccount:
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
-            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"])
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
+            ideco_payout_plan=self.create_payout_plan()
         )
 
         # Before 20 year threshold
@@ -711,7 +724,8 @@ class TestIdecoInvestmentAccount:
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
-            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"])
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
+            ideco_payout_plan=self.create_payout_plan()
         )
 
         amount = ideco.withdraw_tax_free_lump_sum(
@@ -743,7 +757,8 @@ class TestIdecoInvestmentAccount:
                 asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                     weights={"VGT": decimal.Decimal(1)}
                 ),
-                asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT"])
+                asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT"]),
+                ideco_payout_plan=self.create_payout_plan()
             )
 
     def test_init_rejects_strategy_asset_missing_from_account(self):
@@ -768,7 +783,8 @@ class TestIdecoInvestmentAccount:
                 asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                     weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1), "SPY": decimal.Decimal(1)}
                 ),
-                asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"])
+                asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
+                ideco_payout_plan=self.create_payout_plan()
             )
 
     def test_init_rejects_different_assets_between_account_strategies(self):
@@ -793,7 +809,8 @@ class TestIdecoInvestmentAccount:
                 asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                     weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
                 ),
-                asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT"])
+                asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT"]),
+                ideco_payout_plan=self.create_payout_plan()
             )
 
 
@@ -1209,7 +1226,11 @@ class TestSimpleInvestmentManager:
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VOO": decimal.Decimal(1)}
             ),
-            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"])
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"]),
+            ideco_payout_plan=yenwealth.investments.IdecoPayoutPlan(
+                payout_start_age=75,
+                payout_period_in_years=20
+            )
         )
 
         # 3. Old NISA Account: zero-value VOO portfolio
@@ -1243,20 +1264,11 @@ class TestSimpleInvestmentManager:
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"])
         )
 
-        # 5. Investment Policy: Withdrawal starts at age 75 for 20 years
-        investment_plan = yenwealth.investments.InvestmentPlan(
-            ideco_payout_plan=yenwealth.investments.IdecoPayoutPlan(
-                payout_start_age=75,
-                payout_period_in_years=20
-            )
-        )
-
         return yenwealth.investments.SimpleInvestmentManager(
             ordinary_investment_account=ordinary,
             ideco_investment_account=ideco,
             old_nisa_account=old_nisa,
             nisa_account=nisa,
-            investment_plan=investment_plan,
             simulation_start_age=30,
             simulation_start_year=2024
         )
@@ -1272,7 +1284,6 @@ class TestSimpleInvestmentManager:
             "ideco_investment_account": manager.ideco_investment_account,
             "old_nisa_account": manager.old_nisa_account,
             "nisa_account": manager.nisa_account,
-            "investment_plan": manager.investment_plan,
             "simulation_start_age": manager.simulation_start_age,
             "simulation_start_year": manager.simulation_start_year,
         }

@@ -26,13 +26,6 @@ def main():
     asset_purchase_strategy = yenwealth.investments.ProportionalAssetPurchaseStrategy(weights={"VOO": decimal.Decimal("1.0")})
     asset_sale_strategy = yenwealth.investments.SequentialAssetSaleStrategy(sale_order=["VOO"])
 
-    investment_plan = yenwealth.investments.InvestmentPlan(
-        ideco_payout_plan=yenwealth.investments.IdecoPayoutPlan(
-            payout_start_age=65,
-            payout_period_in_years=20
-        )
-    )
-
     economic_data_index = range(2000, 2020)
 
     historical_economic_data = yenwealth.simulations.core.EconomicData(
@@ -79,7 +72,11 @@ def main():
                     },
                     contribution_start_year=2015,
                     asset_purchase_strategy=asset_purchase_strategy,
-                    asset_sale_strategy=asset_sale_strategy
+                    asset_sale_strategy=asset_sale_strategy,
+                    ideco_payout_plan=yenwealth.investments.IdecoPayoutPlan(
+                        payout_start_age=65,
+                        payout_period_in_years=20
+                    )
                 ),
                 old_nisa_account=yenwealth.investments.OldNisaAccount(
                     year_to_asset_map={
@@ -106,7 +103,6 @@ def main():
                     asset_purchase_strategy=asset_purchase_strategy,
                     asset_sale_strategy=asset_sale_strategy
                 ),
-                investment_plan=investment_plan,
                 simulation_start_age=simulation_start_age,
                 simulation_start_year=simulation_start_year
             )

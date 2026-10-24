@@ -296,6 +296,11 @@ class OrdinaryInvestmentAccount:
         return decimal.Decimal(sum(net_values, decimal.Decimal(0))).quantize(constants.YEN, decimal.ROUND_DOWN)
 
 
+class IdecoPayoutPlan(pydantic.BaseModel):
+    payout_start_age: int
+    payout_period_in_years: int
+
+
 @beartype.beartype
 class IdecoInvestmentAccount:
 
@@ -304,13 +309,15 @@ class IdecoInvestmentAccount:
         asset_map: dict[str, Asset],
         contribution_start_year: int,
         asset_purchase_strategy: AssetPurchaseStrategy,
-        asset_sale_strategy: AssetSaleStrategy
+        asset_sale_strategy: AssetSaleStrategy,
+        ideco_payout_plan: IdecoPayoutPlan
     ):
 
         self.asset_map = asset_map
         self.contribution_start_year = contribution_start_year
         self.asset_purchase_strategy = asset_purchase_strategy
         self.asset_sale_strategy = asset_sale_strategy
+        self.ideco_payout_plan = ideco_payout_plan
 
         _validate_strategy_asset_names(
             account_name="ideco investment account",
@@ -628,16 +635,6 @@ class NisaAccount:
             self.asset_map[name].sell(withdrawal)
 
 
-class IdecoPayoutPlan(pydantic.BaseModel):
-    payout_start_age: int
-    payout_period_in_years: int
-
-
-class InvestmentPlan(pydantic.BaseModel):
-
-    ideco_payout_plan: IdecoPayoutPlan
-
-
 class InvestmentManager(typing.Protocol):
 
     simulation_start_year: int
@@ -713,7 +710,6 @@ class SimpleInvestmentManager:
         ideco_investment_account: IdecoInvestmentAccount | None = None,
         old_nisa_account: OldNisaAccount | None = None,
         nisa_account: NisaAccount | None = None,
-        investment_plan: InvestmentPlan,
         simulation_start_age: int,
         simulation_start_year: int
     ):
@@ -733,7 +729,6 @@ class SimpleInvestmentManager:
         self.ideco_investment_account = ideco_investment_account
         self.old_nisa_account = old_nisa_account
         self.nisa_account = nisa_account
-        self.investment_plan = investment_plan
         self.simulation_start_age = simulation_start_age
         self.simulation_start_year = simulation_start_year
 
@@ -975,7 +970,7 @@ class SimpleInvestmentManager:
         # Check if we should do lump withdrawal from iDeCo
         if (
             self.ideco_investment_account is not None
-            and self._current_age == self.investment_plan.ideco_payout_plan.payout_start_age
+            and self._current_age == self.ideco_investment_account.ideco_payout_plan.payout_start_age
         ):
 
             tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(
