@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.6.0
+- improved - renamed a large number of classes from investment module so as to improve clarity
+- improved - account objects sent to SimpleInvestmentManager are now optional
+- improved - account objects now own their purchase and sale strategies
+- improved - IdecoPensionPayoutPlan now owns its validation logic
+
 ### 0.5.3
 - improved - SimpleInvestmentManager now validates all assets in accounts passed to it are accounted for in investment policies
 
