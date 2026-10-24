@@ -711,12 +711,23 @@ class SimpleInvestmentManager:
         *,
         ordinary_investment_account: OrdinaryInvestmentAccount | None = None,
         ideco_investment_account: IdecoInvestmentAccount | None = None,
-        old_nisa_account: OldNisaAccount,
-        nisa_account: NisaAccount,
+        old_nisa_account: OldNisaAccount | None = None,
+        nisa_account: NisaAccount | None = None,
         investment_plan: InvestmentPlan,
         simulation_start_age: int,
         simulation_start_year: int
     ):
+
+        if all(
+            account is None
+            for account in (
+                ordinary_investment_account,
+                ideco_investment_account,
+                old_nisa_account,
+                nisa_account,
+            )
+        ):
+            raise ValueError("At least one investment account must be configured")
 
         self.ordinary_investment_account = ordinary_investment_account
         self.ideco_investment_account = ideco_investment_account
@@ -905,7 +916,7 @@ class SimpleInvestmentManager:
         if remaining_amount > 0:
             raise ValueError(
                 "Cannot deposit the remaining amount because ordinary investment account is not configured, "
-                "and deposit limits of other accounts were exhausted"
+                "and deposit limits of other available accounts were exhausted"
             )
 
     def withdraw(self, desired_cash: decimal.Decimal):
@@ -1019,15 +1030,8 @@ class SimpleInvestmentManager:
         }
 
         return {
-            "ordinary_investment_account": account_values.get(
-                "ordinary_investment_account", decimal.Decimal(0)
-            ),
-            "ideco_investment_account": account_values.get(
-                "ideco_investment_account", decimal.Decimal(0)
-            ),
-            "old_nisa_account": account_values.get("old_nisa_account", decimal.Decimal(0)),
-            "nisa_account": account_values.get("nisa_account", decimal.Decimal(0)),
-            "total_portfolio_value": self.portfolio_value
+            **account_values,
+            "total_portfolio_value": self.portfolio_value,
         }
 
     def get_formatted_portfolio_summary_description(self) -> str:

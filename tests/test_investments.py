@@ -1276,6 +1276,17 @@ class TestSimpleInvestmentManager:
 
         return yenwealth.investments.SimpleInvestmentManager(**arguments)
 
+    def test_init_requires_at_least_one_account(self, investment_manager):
+
+        with pytest.raises(ValueError, match="At least one investment account must be configured"):
+            self.create_investment_manager(
+                investment_manager,
+                ordinary_investment_account=None,
+                ideco_investment_account=None,
+                old_nisa_account=None,
+                nisa_account=None,
+            )
+
     def test_init_allows_ordinary_account_to_be_omitted(self, investment_manager):
 
         manager = self.create_investment_manager(
@@ -1286,7 +1297,7 @@ class TestSimpleInvestmentManager:
         assert manager.ordinary_investment_account is None
         assert manager.portfolio_value == decimal.Decimal(0)
         assert manager.after_tax_portfolio_value == decimal.Decimal(0)
-        assert manager.get_portfolio_summary()["ordinary_investment_account"] == decimal.Decimal(0)
+        assert "ordinary_investment_account" not in manager.get_portfolio_summary()
 
     def test_init_allows_ideco_account_to_be_omitted(self, investment_manager):
 
@@ -1298,7 +1309,84 @@ class TestSimpleInvestmentManager:
         assert manager.ideco_investment_account is None
         assert manager.portfolio_value == decimal.Decimal(0)
         assert manager.after_tax_portfolio_value == decimal.Decimal(0)
-        assert manager.get_portfolio_summary()["ideco_investment_account"] == decimal.Decimal(0)
+        assert "ideco_investment_account" not in manager.get_portfolio_summary()
+
+    def test_init_omits_only_old_nisa_account_from_summary_when_not_configured(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            old_nisa_account=None,
+        )
+
+        assert manager.old_nisa_account is None
+
+        assert manager.nisa_account is not None
+        manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
+        summary = manager.get_portfolio_summary()
+
+        assert "old_nisa_account" not in set(summary)
+        assert summary["nisa_account"] == decimal.Decimal(1_000_000)
+        assert summary["total_portfolio_value"] == decimal.Decimal(1_000_000)
+
+        description = manager.get_formatted_portfolio_summary_description()
+        assert "old_nisa_account" not in description
+
+    def test_init_omits_nisa_account_from_summary_when_not_configured(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            nisa_account=None,
+        )
+
+        assert manager.nisa_account is None
+
+        ordinary_account = manager.ordinary_investment_account
+        assert ordinary_account is not None
+        ordinary_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
+        summary = manager.get_portfolio_summary()
+
+        assert "nisa_account" not in summary
+        assert summary["ordinary_investment_account"] == decimal.Decimal(1_000_000)
+        assert summary["total_portfolio_value"] == decimal.Decimal(1_000_000)
+
+        description = manager.get_formatted_portfolio_summary_description()
+        assert "\nnisa_account:" not in description
+
+    def test_deposit_without_old_nisa_account(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            old_nisa_account=None,
+        )
+
+        manager.deposit(amount=decimal.Decimal(4_000_000), age=30)
+
+        assert manager.old_nisa_account is None
+        assert manager.ideco_investment_account is not None
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(276_000)
+        assert manager.nisa_account is not None
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(3_600_000)
+        assert manager.ordinary_investment_account is not None
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(124_000)
+
+    def test_deposit_without_nisa_account_uses_ideco_then_ordinary_account(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            nisa_account=None,
+        )
+
+        assert manager.nisa_account is None
+
+        manager.deposit(amount=decimal.Decimal(1_000_000), age=30)
+
+        ideco_account = manager.ideco_investment_account
+        ordinary_account = manager.ordinary_investment_account
+
+        assert ideco_account is not None
+        assert ordinary_account is not None
+        assert ideco_account.portfolio_value == decimal.Decimal(276_000)
+        assert ordinary_account.portfolio_value == decimal.Decimal(724_000)
 
     def test_deposit_without_ordinary_account_uses_tax_advantaged_capacity(self, investment_manager):
 
@@ -1309,6 +1397,7 @@ class TestSimpleInvestmentManager:
 
         assert manager.ideco_investment_account is not None
         assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(0)
+        assert manager.nisa_account is not None
         assert manager.nisa_account.portfolio_value == decimal.Decimal(0)
 
         manager.deposit(amount=decimal.Decimal(3_000_000), age=30)
@@ -1323,6 +1412,7 @@ class TestSimpleInvestmentManager:
             ideco_investment_account=None,
         )
         assert manager.ordinary_investment_account is not None
+        assert manager.nisa_account is not None
         assert manager.nisa_account.portfolio_value == decimal.Decimal(0)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(0)
 
@@ -1359,7 +1449,10 @@ class TestSimpleInvestmentManager:
             ordinary_investment_account=None,
         )
 
-        manager.old_nisa_account.year_to_asset_map = {
+        old_nisa_account = manager.old_nisa_account
+        assert old_nisa_account is not None
+
+        old_nisa_account.year_to_asset_map = {
             2024: {
                 "VOO": yenwealth.investments.Asset(
                     name="VOO",
@@ -1369,11 +1462,13 @@ class TestSimpleInvestmentManager:
                 )
             }
         }
+
+        assert manager.nisa_account is not None
         manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
 
         manager.withdraw(desired_cash=decimal.Decimal(2_000_000))
 
-        assert manager.old_nisa_account.portfolio_value == decimal.Decimal(0)
+        assert old_nisa_account.portfolio_value == decimal.Decimal(0)
         assert manager.nisa_account.portfolio_value == decimal.Decimal(500_000)
 
     def test_withdraw_without_ideco_account_uses_old_nisa_then_nisa(self, investment_manager):
@@ -1383,7 +1478,10 @@ class TestSimpleInvestmentManager:
             ideco_investment_account=None,
         )
 
-        manager.old_nisa_account.year_to_asset_map = {
+        old_nisa_account = manager.old_nisa_account
+        assert old_nisa_account is not None
+
+        old_nisa_account.year_to_asset_map = {
             2024: {
                 "VOO": yenwealth.investments.Asset(
                     name="VOO",
@@ -1393,12 +1491,50 @@ class TestSimpleInvestmentManager:
                 )
             }
         }
+
+        assert manager.nisa_account is not None
         manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
 
         manager.withdraw(desired_cash=decimal.Decimal(2_000_000))
 
-        assert manager.old_nisa_account.portfolio_value == decimal.Decimal(0)
+        assert old_nisa_account.portfolio_value == decimal.Decimal(0)
         assert manager.nisa_account.portfolio_value == decimal.Decimal(500_000)
+
+    def test_withdraw_without_old_nisa_account_uses_nisa(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            ordinary_investment_account=None,
+            old_nisa_account=None,
+        )
+        assert manager.nisa_account is not None
+        manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
+
+        manager.withdraw(desired_cash=decimal.Decimal(1_000_000))
+
+        assert manager.old_nisa_account is None
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(1_000_000)
+
+    def test_withdraw_without_nisa_account_uses_ordinary_then_old_nisa(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            nisa_account=None,
+        )
+
+        assert manager.ordinary_investment_account is not None
+        manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(500_000)
+
+        old_nisa_account = manager.old_nisa_account
+
+        assert old_nisa_account is not None
+        old_nisa_account.year_to_asset_map[2024]["VOO"].principal = decimal.Decimal(500_000)
+
+        manager.withdraw(desired_cash=decimal.Decimal(750_000))
+
+        assert manager.nisa_account is None
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(0)
+        assert old_nisa_account.portfolio_value == decimal.Decimal(250_000)
 
     def test_withdraw_without_ordinary_account_raises_when_funds_are_insufficient(self, investment_manager):
 
@@ -1407,7 +1543,11 @@ class TestSimpleInvestmentManager:
             ordinary_investment_account=None,
         )
 
-        manager.old_nisa_account.year_to_asset_map[2024]["VOO"].principal = decimal.Decimal(500_000)
+        old_nisa_account = manager.old_nisa_account
+        assert old_nisa_account is not None
+
+        old_nisa_account.year_to_asset_map[2024]["VOO"].principal = decimal.Decimal(500_000)
+        assert manager.nisa_account is not None
         manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
 
         with pytest.raises(yenwealth.investments.InsufficientFunds, match="Not enough funds"):
@@ -1435,6 +1575,30 @@ class TestSimpleInvestmentManager:
 
         assert manager.current_year == 2025
 
+    def test_advance_one_year_without_old_nisa_account(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            old_nisa_account=None,
+        )
+
+        manager.advance_one_year({"VOO": decimal.Decimal("0.05")})
+
+        assert manager.old_nisa_account is None
+        assert manager.current_year == 2025
+
+    def test_advance_one_year_without_nisa_account(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            nisa_account=None,
+        )
+
+        manager.advance_one_year({"VOO": decimal.Decimal("0.05")})
+
+        assert manager.nisa_account is None
+        assert manager.current_year == 2025
+
     def test_optimize_investments_skips_ordinary_account_when_absent(self, investment_manager):
 
         manager = self.create_investment_manager(
@@ -1458,6 +1622,41 @@ class TestSimpleInvestmentManager:
 
         assert manager.ideco_investment_account is None
 
+    def test_optimize_investments_without_old_nisa_account_still_topups_nisa(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            old_nisa_account=None,
+        )
+
+        assert manager.ordinary_investment_account is not None
+
+        manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(10_000_000)
+        manager.current_year = 2044
+
+        manager.optimize_investments()
+
+        assert manager.old_nisa_account is None
+        assert manager.nisa_account is not None
+        assert manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
+        assert manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(6_400_000)
+
+    def test_optimize_investments_without_nisa_account_skips_nisa_topup(self, investment_manager):
+
+        manager = self.create_investment_manager(
+            investment_manager,
+            old_nisa_account=None,
+            nisa_account=None,
+        )
+
+        assert manager.ordinary_investment_account is not None
+        manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(10_000_000)
+
+        manager.optimize_investments()
+
+        assert manager.nisa_account is None
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(10_000_000)
+
     def test_optimize_investments_without_ideco_account_still_topups_nisa(self, investment_manager):
 
         manager = self.create_investment_manager(
@@ -1467,6 +1666,7 @@ class TestSimpleInvestmentManager:
         assert manager.ordinary_investment_account is not None
         manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(10_000_000)
 
+        assert manager.nisa_account is not None
         assert manager.nisa_account.portfolio_value == decimal.Decimal(0)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(10_000_000)
 
@@ -1483,7 +1683,10 @@ class TestSimpleInvestmentManager:
             ordinary_investment_account=None,
         )
 
-        manager.old_nisa_account.year_to_asset_map = {
+        old_nisa_account = manager.old_nisa_account
+        assert old_nisa_account is not None
+
+        old_nisa_account.year_to_asset_map = {
             2024: {
                 "VOO": yenwealth.investments.Asset(
                     name="VOO",
@@ -1498,7 +1701,7 @@ class TestSimpleInvestmentManager:
         with pytest.raises(ValueError, match="ordinary investment account is not configured"):
             manager.optimize_investments()
 
-        assert 2024 not in manager.old_nisa_account.year_to_asset_map
+        assert 2024 not in old_nisa_account.year_to_asset_map
 
     def test_optimize_ideco_lump_sum_requires_ordinary_account(self, investment_manager):
 
@@ -1523,6 +1726,7 @@ class TestSimpleInvestmentManager:
         investment_manager.deposit(amount=decimal.Decimal(5_000_000), age=30)
 
         assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal(276_000)
+        assert investment_manager.nisa_account is not None
         assert investment_manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
         assert investment_manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(1_124_000)
 
@@ -1530,7 +1734,10 @@ class TestSimpleInvestmentManager:
 
         # Setup initial balances directly
         investment_manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
-        investment_manager.old_nisa_account.year_to_asset_map = {
+        old_nisa_account = investment_manager.old_nisa_account
+        assert old_nisa_account is not None
+
+        old_nisa_account.year_to_asset_map = {
             2010: {
                 "VOO": yenwealth.investments.Asset(
                     name="VOO",
@@ -1540,6 +1747,7 @@ class TestSimpleInvestmentManager:
                 )
             }
         }
+        assert investment_manager.nisa_account is not None
         investment_manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
 
         # Withdraw 2,000,000 Yen
@@ -1547,14 +1755,17 @@ class TestSimpleInvestmentManager:
         investment_manager.withdraw(desired_cash=decimal.Decimal(2_000_000))
 
         assert investment_manager.ordinary_investment_account.portfolio_value == decimal.Decimal(0)
-        assert investment_manager.old_nisa_account.portfolio_value == decimal.Decimal(0)
+        assert old_nisa_account.portfolio_value == decimal.Decimal(0)
         assert investment_manager.nisa_account.portfolio_value == decimal.Decimal(1_500_000)
 
     def test_optimize_investments_old_nisa_liquidation(self, investment_manager):
 
         # Current year = start_year (2024) + age (50) - start_age (30) = 2044
         # 20 years prior = 2024. Populate Old NISA portfolio for 2024
-        investment_manager.old_nisa_account.year_to_asset_map = {
+        old_nisa_account = investment_manager.old_nisa_account
+        assert old_nisa_account is not None
+
+        old_nisa_account.year_to_asset_map = {
             2024: {
                 "VOO": yenwealth.investments.Asset(
                     name="VOO",
@@ -1569,7 +1780,8 @@ class TestSimpleInvestmentManager:
         investment_manager.optimize_investments()
 
         # 2024 Old NISA portfolio should be removed and moved into NISA Account
-        assert 2024 not in investment_manager.old_nisa_account.year_to_asset_map
+        assert 2024 not in old_nisa_account.year_to_asset_map
+        assert investment_manager.nisa_account is not None
         assert investment_manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(1_000_000)
 
     def test_optimize_investments_ideco_lump_sum_and_nisa_topup(self, investment_manager):
@@ -1584,5 +1796,6 @@ class TestSimpleInvestmentManager:
         # 1. iDeCo 10M transferred to Ordinary Account tax-free
         # 2. Ordinary Account then transfers 3.6M (annual limit) to NISA Account
         assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal(0)
+        assert investment_manager.nisa_account is not None
         assert investment_manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
         assert investment_manager.ordinary_investment_account.asset_map['VOO'].principal == decimal.Decimal(6_400_000)
