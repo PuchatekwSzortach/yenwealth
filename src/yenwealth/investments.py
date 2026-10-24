@@ -73,7 +73,7 @@ class Asset:
 
 @typing.runtime_checkable
 @beartype.beartype
-class DepositStrategy(typing.Protocol):
+class AssetPurchaseStrategy(typing.Protocol):
 
     @property
     def asset_names(self) -> set[str]:
@@ -87,7 +87,7 @@ class DepositStrategy(typing.Protocol):
         ...
 
 
-class ProportionalDepositStrategy(DepositStrategy):
+class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
 
     def __init__(self, weights: dict[str, decimal.Decimal]):
 
@@ -125,7 +125,7 @@ class ProportionalDepositStrategy(DepositStrategy):
 
 @typing.runtime_checkable
 @beartype.beartype
-class WithdrawStrategy(typing.Protocol):
+class AssetSaleStrategy(typing.Protocol):
 
     @property
     def asset_names(self) -> set[str]:
@@ -142,7 +142,7 @@ class WithdrawStrategy(typing.Protocol):
 def _validate_strategy_asset_names(
     account_name: str,
     account_asset_names: typing.Collection[str],
-    strategies: dict[str, DepositStrategy | WithdrawStrategy]
+    strategies: dict[str, AssetPurchaseStrategy | AssetSaleStrategy]
 ) -> None:
 
     account_asset_names = set(account_asset_names)
@@ -157,18 +157,18 @@ def _validate_strategy_asset_names(
             )
 
 
-class SequentialWithdrawStrategy(WithdrawStrategy):
+class SequentialAssetSaleStrategy(AssetSaleStrategy):
 
-    def __init__(self, withdraw_order: list[str]):
+    def __init__(self, sale_order: list[str]):
 
-        if len(withdraw_order) == 0:
+        if len(sale_order) == 0:
             raise ValueError("At least one asset name must be provided")
 
-        self.withdraw_order = withdraw_order
+        self.sale_order = sale_order
 
     @property
     def asset_names(self) -> set[str]:
-        return set(self.withdraw_order)
+        return set(self.sale_order)
 
     def calculate_withdrawal_amounts(
         self,
@@ -176,7 +176,7 @@ class SequentialWithdrawStrategy(WithdrawStrategy):
         asset_map: dict[str, decimal.Decimal],
     ) -> dict[str, decimal.Decimal]:
 
-        target_asset_map = {name: value for (name, value) in asset_map.items() if name in set(self.withdraw_order)}
+        target_asset_map = {name: value for (name, value) in asset_map.items() if name in set(self.sale_order)}
 
         asset_value = sum(target_asset_map.values(), decimal.Decimal(0)).quantize(constants.YEN, decimal.ROUND_DOWN)
 
@@ -192,7 +192,7 @@ class SequentialWithdrawStrategy(WithdrawStrategy):
         remaining = amount
         withdrawals = {}
 
-        for asset_name in self.withdraw_order:
+        for asset_name in self.sale_order:
 
             withdrawal = min(remaining, target_asset_map[asset_name])
 
@@ -213,22 +213,22 @@ class OrdinaryInvestmentAccount:
     def __init__(
         self,
         asset_map: dict[str, Asset],
-        deposit_strategy: DepositStrategy,
-        withdrawal_strategy: WithdrawStrategy,
+        asset_purchase_strategy: AssetPurchaseStrategy,
+        asset_sale_strategy: AssetSaleStrategy,
         capital_gain_tax_rate: decimal.Decimal = decimal.Decimal("0.20325")
     ):
 
         self.capital_gain_tax_rate = capital_gain_tax_rate
         self.asset_map = asset_map
-        self.deposit_strategy = deposit_strategy
-        self.withdrawal_strategy = withdrawal_strategy
+        self.asset_purchase_strategy = asset_purchase_strategy
+        self.asset_sale_strategy = asset_sale_strategy
 
         _validate_strategy_asset_names(
             account_name="ordinary investment account",
             account_asset_names=self.asset_map,
             strategies={
-                "deposit_strategy": self.deposit_strategy,
-                "withdrawal_strategy": self.withdrawal_strategy,
+                "asset_purchase_strategy": self.asset_purchase_strategy,
+                "asset_sale_strategy": self.asset_sale_strategy,
             }
         )
 
@@ -243,7 +243,7 @@ class OrdinaryInvestmentAccount:
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
 
-        allocations = self.deposit_strategy.allocate(
+        allocations = self.asset_purchase_strategy.allocate(
             amount=amount,
             assets=list(self.asset_map.keys())
         )
@@ -274,7 +274,7 @@ class OrdinaryInvestmentAccount:
                 f"Withdrawal value {desired_cash} exceeds maximum cash withdrawal {self.max_cash_withdrawal}"
             )
 
-        net_cash_withdrawals = self.withdrawal_strategy.calculate_withdrawal_amounts(
+        net_cash_withdrawals = self.asset_sale_strategy.calculate_withdrawal_amounts(
             amount=desired_cash,
             asset_map=self._asset_to_net_value_map
         )
@@ -303,21 +303,21 @@ class IdecoInvestmentAccount:
         self,
         asset_map: dict[str, Asset],
         contribution_start_year: int,
-        deposit_strategy: DepositStrategy,
-        withdrawal_strategy: WithdrawStrategy
+        asset_purchase_strategy: AssetPurchaseStrategy,
+        asset_sale_strategy: AssetSaleStrategy
     ):
 
         self.asset_map = asset_map
         self.contribution_start_year = contribution_start_year
-        self.deposit_strategy = deposit_strategy
-        self.withdrawal_strategy = withdrawal_strategy
+        self.asset_purchase_strategy = asset_purchase_strategy
+        self.asset_sale_strategy = asset_sale_strategy
 
         _validate_strategy_asset_names(
             account_name="ideco investment account",
             account_asset_names=self.asset_map,
             strategies={
-                "deposit_strategy": self.deposit_strategy,
-                "withdrawal_strategy": self.withdrawal_strategy,
+                "asset_purchase_strategy": self.asset_purchase_strategy,
+                "asset_sale_strategy": self.asset_sale_strategy,
             }
         )
 
@@ -349,7 +349,7 @@ class IdecoInvestmentAccount:
             raise ValueError(
                 f"Deposit amount {amount} exceeds maximum allowed contribution of {self.max_annual_contribution}")
 
-        allocations = self.deposit_strategy.allocate(
+        allocations = self.asset_purchase_strategy.allocate(
             amount=amount,
             assets=list(self.asset_map.keys())
         )
@@ -403,7 +403,7 @@ class IdecoInvestmentAccount:
 
     def _withdraw(self, amount: decimal.Decimal):
 
-        withdrawals = self.withdrawal_strategy.calculate_withdrawal_amounts(
+        withdrawals = self.asset_sale_strategy.calculate_withdrawal_amounts(
             amount=amount,
             asset_map={name: asset.value for name, asset in self.asset_map.items()}
         )
@@ -443,11 +443,11 @@ class OldNisaAccount:
     def __init__(
         self,
         year_to_asset_map: dict[int, dict[str, Asset]],
-        withdrawal_strategy: WithdrawStrategy
+        asset_sale_strategy: AssetSaleStrategy
     ):
 
         self.year_to_asset_map = copy.deepcopy(year_to_asset_map)
-        self.withdrawal_strategy = withdrawal_strategy
+        self.asset_sale_strategy = asset_sale_strategy
 
         _validate_strategy_asset_names(
             account_name="old nisa account",
@@ -456,7 +456,7 @@ class OldNisaAccount:
                 for asset_map in self.year_to_asset_map.values()
                 for name in asset_map
             },
-            strategies={"withdrawal_strategy": self.withdrawal_strategy}
+            strategies={"asset_sale_strategy": self.asset_sale_strategy}
         )
 
     def advance_one_year(self, investment_returns: dict[str, decimal.Decimal], year: int):
@@ -494,7 +494,7 @@ class OldNisaAccount:
         if portfolio_value < desired_cash:
             raise ValueError(f"Portfolio value for {portfolio_year} is not large enough")
 
-        withdrawals = self.withdrawal_strategy.calculate_withdrawal_amounts(
+        withdrawals = self.asset_sale_strategy.calculate_withdrawal_amounts(
             amount=desired_cash,
             asset_map={name: asset.value for name, asset in asset_map.items()}
         )
@@ -543,22 +543,22 @@ class NisaAccount:
     def __init__(
         self,
         asset_map: dict[str, Asset],
-        deposit_strategy: DepositStrategy,
-        withdrawal_strategy: WithdrawStrategy
+        asset_purchase_strategy: AssetPurchaseStrategy,
+        asset_sale_strategy: AssetSaleStrategy
     ):
 
         self.annual_deposit_limit = decimal.Decimal("3.6") * constants.MILLION
         self.total_deposit_limit = decimal.Decimal(18) * constants.MILLION
         self.asset_map = asset_map
-        self.deposit_strategy = deposit_strategy
-        self.withdrawal_strategy = withdrawal_strategy
+        self.asset_purchase_strategy = asset_purchase_strategy
+        self.asset_sale_strategy = asset_sale_strategy
 
         _validate_strategy_asset_names(
             account_name="nisa account",
             account_asset_names=self.asset_map,
             strategies={
-                "deposit_strategy": self.deposit_strategy,
-                "withdrawal_strategy": self.withdrawal_strategy,
+                "asset_purchase_strategy": self.asset_purchase_strategy,
+                "asset_sale_strategy": self.asset_sale_strategy,
             }
         )
 
@@ -596,7 +596,7 @@ class NisaAccount:
             )
             raise ValueError(message)
 
-        allocations = self.deposit_strategy.allocate(
+        allocations = self.asset_purchase_strategy.allocate(
             amount=amount,
             assets=list(self.asset_map.keys())
         )
@@ -619,7 +619,7 @@ class NisaAccount:
         if desired_cash > self.portfolio_value:
             raise InsufficientFunds(f"Withdrawal value {desired_cash} exceeds portfolio value {self.portfolio_value}")
 
-        withdrawals = self.withdrawal_strategy.calculate_withdrawal_amounts(
+        withdrawals = self.asset_sale_strategy.calculate_withdrawal_amounts(
             amount=desired_cash,
             asset_map={name: asset.value for name, asset in self.asset_map.items()}
         )
@@ -628,14 +628,14 @@ class NisaAccount:
             self.asset_map[name].sell(withdrawal)
 
 
-class IdecoWithdrawalPlan(pydantic.BaseModel):
-    withdrawal_start_age: int
-    withdrawal_period_in_years: int
+class IdecoPayoutPlan(pydantic.BaseModel):
+    payout_start_age: int
+    payout_period_in_years: int
 
 
 class InvestmentPlan(pydantic.BaseModel):
 
-    ideco_withdrawal_plan: IdecoWithdrawalPlan
+    ideco_payout_plan: IdecoPayoutPlan
 
 
 class InvestmentManager(typing.Protocol):
@@ -975,7 +975,7 @@ class SimpleInvestmentManager:
         # Check if we should do lump withdrawal from iDeCo
         if (
             self.ideco_investment_account is not None
-            and self._current_age == self.investment_plan.ideco_withdrawal_plan.withdrawal_start_age
+            and self._current_age == self.investment_plan.ideco_payout_plan.payout_start_age
         ):
 
             tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(
