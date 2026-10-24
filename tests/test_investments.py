@@ -530,10 +530,10 @@ class TestOrdinaryInvestmentAccount:
 class TestIdecoInvestmentAccount:
 
     @staticmethod
-    def create_payout_plan():
-        return yenwealth.investments.IdecoPayoutPlan(
-            payout_start_age=75,
-            payout_period_in_years=20
+    def create_payout_plan(start_age: int = 75, period_in_years: int = 20):
+        return yenwealth.investments.IdecoPensionPayoutPlan(
+            start_age=start_age,
+            period_in_years=period_in_years
         )
 
     @staticmethod
@@ -562,12 +562,12 @@ class TestIdecoInvestmentAccount:
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
-            ideco_payout_plan=self.create_payout_plan()
+            ideco_pension_payout_plan=self.create_payout_plan()
         )
 
         assert ideco.portfolio_value == decimal.Decimal(40)
 
-    def test_deposit(self):
+    def test_deposit_succeeds_before_pension_and_fails_after(self):
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
@@ -576,7 +576,7 @@ class TestIdecoInvestmentAccount:
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(3)}
             ),
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
-            ideco_payout_plan=self.create_payout_plan()
+            ideco_pension_payout_plan=self.create_payout_plan()
         )
 
         ideco.deposit(
@@ -587,6 +587,11 @@ class TestIdecoInvestmentAccount:
         assert ideco.asset_map["VGT"].principal == decimal.Decimal("12.5")
         assert ideco.asset_map["VOO"].principal == decimal.Decimal("27.5")
 
+        ideco.start_pension_scheme(age=75)
+
+        with pytest.raises(ValueError, match="Cannot deposit after pension drawing has started"):
+            ideco.deposit(amount=decimal.Decimal(10), age=40)
+
     def test_advance_one_year(self):
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
@@ -596,7 +601,7 @@ class TestIdecoInvestmentAccount:
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
-            ideco_payout_plan=self.create_payout_plan()
+            ideco_pension_payout_plan=self.create_payout_plan()
         )
 
         ideco.advance_one_year(
@@ -618,11 +623,40 @@ class TestIdecoInvestmentAccount:
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
-            ideco_payout_plan=self.create_payout_plan()
+            ideco_pension_payout_plan=self.create_payout_plan()
         )
 
         with pytest.raises(ValueError):
             ideco.withdraw_pension(age=70)
+
+    @pytest.mark.parametrize("start_age", [59, 76])
+    def test_payout_plan_rejects_invalid_start_age(self, start_age):
+
+        with pytest.raises(ValueError):
+            self.create_payout_plan(start_age=start_age)
+
+    @pytest.mark.parametrize("period_in_years", [4, 21])
+    def test_payout_plan_rejects_invalid_period(self, period_in_years):
+
+        with pytest.raises(ValueError):
+            self.create_payout_plan(period_in_years=period_in_years)
+
+    def test_start_pension_scheme_rejects_age_different_from_plan(self):
+
+        ideco = yenwealth.investments.IdecoInvestmentAccount(
+            asset_map=self.asset_map(),
+            contribution_start_year=2020,
+            asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
+                weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
+            ),
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
+            ideco_pension_payout_plan=self.create_payout_plan(start_age=60)
+        )
+
+        with pytest.raises(ValueError, match="Age 59 does not match planned pension start age 60"):
+            ideco.start_pension_scheme(age=59)
+
+        assert ideco.has_started_drawing_pension is False
 
     def test_withdrawing_pensions(self):
 
@@ -648,13 +682,13 @@ class TestIdecoInvestmentAccount:
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
-            ideco_payout_plan=self.create_payout_plan()
+            ideco_pension_payout_plan=self.create_payout_plan(
+                start_age=70,
+                period_in_years=period_in_years
+            )
         )
 
-        ideco.start_pension_scheme(
-            start_age=70,
-            period_in_years=period_in_years
-        )
+        ideco.start_pension_scheme(age=70)
 
         # First withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
@@ -692,7 +726,7 @@ class TestIdecoInvestmentAccount:
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
-            ideco_payout_plan=self.create_payout_plan()
+            ideco_pension_payout_plan=self.create_payout_plan()
         )
 
         # Before 20 year threshold
@@ -725,7 +759,7 @@ class TestIdecoInvestmentAccount:
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
-            ideco_payout_plan=self.create_payout_plan()
+            ideco_pension_payout_plan=self.create_payout_plan()
         )
 
         amount = ideco.withdraw_tax_free_lump_sum(
@@ -758,7 +792,7 @@ class TestIdecoInvestmentAccount:
                     weights={"VGT": decimal.Decimal(1)}
                 ),
                 asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT"]),
-                ideco_payout_plan=self.create_payout_plan()
+                ideco_pension_payout_plan=self.create_payout_plan()
             )
 
     def test_init_rejects_strategy_asset_missing_from_account(self):
@@ -784,7 +818,7 @@ class TestIdecoInvestmentAccount:
                     weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1), "SPY": decimal.Decimal(1)}
                 ),
                 asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT", "VOO"]),
-                ideco_payout_plan=self.create_payout_plan()
+                ideco_pension_payout_plan=self.create_payout_plan()
             )
 
     def test_init_rejects_different_assets_between_account_strategies(self):
@@ -810,7 +844,7 @@ class TestIdecoInvestmentAccount:
                     weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
                 ),
                 asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT"]),
-                ideco_payout_plan=self.create_payout_plan()
+                ideco_pension_payout_plan=self.create_payout_plan()
             )
 
 
@@ -1227,9 +1261,9 @@ class TestSimpleInvestmentManager:
                 weights={"VOO": decimal.Decimal(1)}
             ),
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"]),
-            ideco_payout_plan=yenwealth.investments.IdecoPayoutPlan(
-                payout_start_age=75,
-                payout_period_in_years=20
+            ideco_pension_payout_plan=yenwealth.investments.IdecoPensionPayoutPlan(
+                start_age=75,
+                period_in_years=20
             )
         )
 

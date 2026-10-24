@@ -72,9 +72,9 @@ def main():
                     contribution_start_year=2015,
                     asset_purchase_strategy=asset_purchase_strategy,
                     asset_sale_strategy=asset_sale_strategy,
-                    ideco_payout_plan=yenwealth.investments.IdecoPayoutPlan(
-                        payout_start_age=65,
-                        payout_period_in_years=20
+                    ideco_pension_payout_plan=yenwealth.investments.IdecoPensionPayoutPlan(
+                        start_age=65,
+                        period_in_years=20
                     )
                 ),
                 old_nisa_account=yenwealth.investments.OldNisaAccount(
