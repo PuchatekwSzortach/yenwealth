@@ -5,13 +5,20 @@ jobs:
   run_commit_stage:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        dependency_set: [minimum, latest]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
-      - name: install dependencies
-        run: |
-          pip install -e ".[dev]"
+      - name: install latest dependencies
+        if: matrix.dependency_set == 'latest'
+        run: pip install --upgrade -e ".[dev]"
+      - name: install minimum dependencies
+        if: matrix.dependency_set == 'minimum'
+        run: pip install --upgrade -c constraints-min.txt -e ".[dev]"
       - name: run checks
         run: bash ./run_checks.sh
