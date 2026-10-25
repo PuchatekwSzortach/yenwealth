@@ -119,6 +119,7 @@ class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
         return {
             asset: amount * weight / total_weight
             for asset, weight in weights.items()
+            if weight != 0
         }
 
 

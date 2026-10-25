@@ -148,7 +148,6 @@ class TestProportionalAssetPurchaseStrategy:
 
         assert result == {
             "VGT": decimal.Decimal(10000),
-            "S&P500": decimal.Decimal(0),
         }
 
 
