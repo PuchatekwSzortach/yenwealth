@@ -18,12 +18,18 @@ LOGGER = logging.getLogger(__name__)
 
 
 class InsufficientFunds(Exception):
+    """
+    Raise when an account cannot satisfy a requested withdrawal.
+    """
 
     pass
 
 
 @beartype.beartype
 class Asset:
+    """
+    Track the principal and gain for one named investment asset.
+    """
 
     def __init__(
             self, name: str,
@@ -38,13 +44,22 @@ class Asset:
 
     @property
     def value(self) -> decimal.Decimal:
+        """
+        Return principal plus gain, rounded down to whole yen.
+        """
         return (self.principal + self.gain).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def advance_one_year(self, change_rate: decimal.Decimal):
+        """
+        Apply an annual return rate after the asset management cost.
+        """
 
         self.gain += self.value * (change_rate - self.annual_management_cost_rate)
 
     def sell(self, amount: decimal.Decimal):
+        """
+        Sell ``amount`` yen, reducing principal and gain proportionally.
+        """
 
         if amount < 0:
             raise ValueError(f"amount value should be non-negative, got {amount}")
@@ -63,6 +78,9 @@ class Asset:
         self.gain -= withdrawal_from_gain
 
     def buy(self, amount: decimal.Decimal):
+        """
+        Add a positive deposit to the asset principal.
+        """
 
         if amount <= 0:
             raise ValueError(f"amount value should be non-negative, got {amount}")
@@ -73,6 +91,9 @@ class Asset:
 @typing.runtime_checkable
 @beartype.beartype
 class AssetPurchaseStrategy(typing.Protocol):
+    """
+    Define how deposits are allocated among an account's assets.
+    """
 
     @property
     def asset_names(self) -> set[str]:
@@ -83,10 +104,16 @@ class AssetPurchaseStrategy(typing.Protocol):
         amount: decimal.Decimal,
         assets: list[str],
     ) -> dict[str, decimal.Decimal]:
+        """
+        Return an asset-to-deposit map for the requested amount.
+        """
         ...
 
 
 class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
+    """
+    Allocate deposits across assets in proportion to configured weights.
+    """
 
     def __init__(self, weights: dict[str, decimal.Decimal]):
 
@@ -100,6 +127,12 @@ class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
         return set(self.weights)
 
     def allocate(self, amount: decimal.Decimal, assets: list[str]) -> dict[str, decimal.Decimal]:
+        """
+        Allocate ``amount`` across ``assets`` using normalized weights.
+
+        Assets with zero weight receive no allocation. Every requested asset must
+        have a configured weight, and their combined weight must be positive.
+        """
 
         missing = set(assets) - self.weights.keys()
 
@@ -126,6 +159,9 @@ class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
 @typing.runtime_checkable
 @beartype.beartype
 class AssetSaleStrategy(typing.Protocol):
+    """
+    Define how an account selects assets to sell for a withdrawal.
+    """
 
     @property
     def asset_names(self) -> set[str]:
@@ -136,6 +172,9 @@ class AssetSaleStrategy(typing.Protocol):
         amount: decimal.Decimal,
         asset_map: dict[str, decimal.Decimal],
     ) -> dict[str, decimal.Decimal]:
+        """
+        Return an asset-to-sale map that raises the requested cash.
+        """
         ...
 
 
@@ -158,6 +197,9 @@ def _validate_strategy_asset_names(
 
 
 class SequentialAssetSaleStrategy(AssetSaleStrategy):
+    """
+    Sell assets in a configured order until the requested amount is met.
+    """
 
     def __init__(self, sale_order: list[str]):
 
@@ -175,6 +217,9 @@ class SequentialAssetSaleStrategy(AssetSaleStrategy):
         amount: decimal.Decimal,
         asset_map: dict[str, decimal.Decimal],
     ) -> dict[str, decimal.Decimal]:
+        """
+        Plan sales in ``sale_order`` using the available asset values.
+        """
 
         target_asset_map = {name: value for (name, value) in asset_map.items() if name in set(self.sale_order)}
 
@@ -209,6 +254,9 @@ class SequentialAssetSaleStrategy(AssetSaleStrategy):
 
 @beartype.beartype
 class OrdinaryInvestmentAccount:
+    """
+    Model a taxable investment account with configurable tax and strategies.
+    """
 
     def __init__(
         self,
@@ -234,11 +282,17 @@ class OrdinaryInvestmentAccount:
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
+        """
+        Return the account's gross asset value in whole yen.
+        """
         return decimal.Decimal(
             sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
         ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def deposit(self, amount: decimal.Decimal):
+        """
+        Allocate a positive deposit across the account's assets.
+        """
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -252,6 +306,9 @@ class OrdinaryInvestmentAccount:
             self.asset_map[name].buy(allocation)
 
     def advance_one_year(self, investment_returns: dict[str, decimal.Decimal]):
+        """
+        Apply annual returns by asset name.
+        """
 
         for name, asset in self.asset_map.items():
             asset.advance_one_year(investment_returns[name])
@@ -268,6 +325,9 @@ class OrdinaryInvestmentAccount:
         }
 
     def withdraw(self, desired_cash: decimal.Decimal):
+        """
+        Sell enough assets to provide ``desired_cash`` after modeled tax.
+        """
 
         if desired_cash > self.max_cash_withdrawal:
             raise InsufficientFunds(
@@ -291,12 +351,18 @@ class OrdinaryInvestmentAccount:
 
     @property
     def max_cash_withdrawal(self) -> decimal.Decimal:
+        """
+        Return the maximum modeled cash withdrawal after capital gains tax.
+        """
 
         net_values = self._asset_to_net_value_map.values()
         return decimal.Decimal(sum(net_values, decimal.Decimal(0))).quantize(constants.YEN, decimal.ROUND_DOWN)
 
 
 class IdecoPensionPayoutPlan(pydantic.BaseModel):
+    """
+    Configure the modeled iDeCo pension start age and payout period.
+    """
 
     minimum_withdrawal_start_age: typing.ClassVar[int] = 60
     maximum_withdrawal_start_age: typing.ClassVar[int] = 75
@@ -311,6 +377,9 @@ class IdecoPensionPayoutPlan(pydantic.BaseModel):
 
 @beartype.beartype
 class IdecoInvestmentAccount:
+    """
+    Model iDeCo contributions, investment growth, and pension withdrawals.
+    """
 
     def __init__(
         self,
@@ -344,11 +413,17 @@ class IdecoInvestmentAccount:
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
+        """
+        Return the gross value of the account's assets in whole yen.
+        """
         return decimal.Decimal(
             sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
         ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def deposit(self, amount: decimal.Decimal, age: int):
+        """
+        Deposit a positive contribution before pension payout begins.
+        """
 
         if self.has_started_drawing_pension:
             raise ValueError("Cannot deposit after pension drawing has started")
@@ -372,11 +447,17 @@ class IdecoInvestmentAccount:
             self.asset_map[name].buy(allocation)
 
     def advance_one_year(self, investment_returns: dict[str, decimal.Decimal]):
+        """
+        Apply annual returns by asset name.
+        """
 
         for name, asset in self.asset_map.items():
             asset.advance_one_year(investment_returns[name])
 
     def start_pension_scheme(self, age: int):
+        """
+        Start pension withdrawals at the age in the configured payout plan.
+        """
 
         start_age = self.ideco_pension_payout_plan.start_age
 
@@ -388,6 +469,9 @@ class IdecoInvestmentAccount:
         self.has_started_drawing_pension = True
 
     def withdraw_pension(self, age: int) -> decimal.Decimal:
+        """
+        Withdraw the next equal-share pension payment for ``age``.
+        """
 
         if self.has_started_drawing_pension is False:
             raise ValueError("pension scheme not initialized")
@@ -422,6 +506,9 @@ class IdecoInvestmentAccount:
             self.asset_map[name].sell(withdrawal)
 
     def get_max_allowed_tax_free_lump_withdrawal_amount(self, year: int) -> decimal.Decimal:
+        """
+        Calculate the modeled tax-free lump-sum allowance for ``year``.
+        """
 
         if year < self.contribution_start_year:
             raise ValueError(f"Year {year} has to be larger than account start year {self.contribution_start_year}")
@@ -434,6 +521,9 @@ class IdecoInvestmentAccount:
             (decimal.Decimal(700_000) * max(years_since_account_started - 20, 0))
 
     def withdraw_tax_free_lump_sum(self, year: int) -> decimal.Decimal:
+        """
+        Withdraw up to the modeled tax-free lump-sum allowance.
+        """
 
         if year < self.contribution_start_year:
             raise ValueError(f"Year {year} has to be larger than account start year {self.contribution_start_year}")
@@ -446,8 +536,10 @@ class IdecoInvestmentAccount:
 @beartype.beartype
 class OldNisaAccount:
     """
-    Old NISA account that no longer allows deposit, and requires investments to be withdrawn within 20 years
-    from when they were made.
+    Model legacy NISA holdings grouped by their original investment year.
+
+    The account does not accept new deposits. Holdings are withdrawn from the
+    oldest investment year first and must be liquidated after 20 years.
     """
 
     def __init__(
@@ -470,6 +562,9 @@ class OldNisaAccount:
         )
 
     def advance_one_year(self, investment_returns: dict[str, decimal.Decimal], year: int):
+        """
+        Apply returns and reject holdings that passed the modeled expiry.
+        """
 
         for investment_year, asset_map in self.year_to_asset_map.items():
 
@@ -481,6 +576,9 @@ class OldNisaAccount:
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
+        """
+        Return the gross value of all legacy NISA holdings in whole yen.
+        """
 
         return decimal.Decimal(
             sum(
@@ -495,7 +593,7 @@ class OldNisaAccount:
         desired_cash: decimal.Decimal
     ):
         """
-        Withdraw from portfolio established on portfolio_year
+        Withdraw ``desired_cash`` from holdings bought in ``portfolio_year``.
         """
 
         asset_map = self.year_to_asset_map[portfolio_year]
@@ -514,7 +612,7 @@ class OldNisaAccount:
 
     def withdraw(self, desired_cash: decimal.Decimal):
         """
-        Withdraw from portfolio in order of oldest to newest
+        Withdraw from investment years in oldest-to-newest order.
         """
 
         if desired_cash < 0:
@@ -547,7 +645,7 @@ class OldNisaAccount:
 @beartype.beartype
 class NisaAccount:
     """
-    NISA account
+    Model a NISA account with annual and lifetime deposit limits.
     """
 
     def __init__(
@@ -579,15 +677,24 @@ class NisaAccount:
 
     @property
     def principal(self) -> decimal.Decimal:
+        """
+        Return the total amount deposited into this account.
+        """
         return decimal.Decimal(sum((asset.principal for asset in self.asset_map.values()), decimal.Decimal(0)))
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
+        """
+        Return the gross value of the account's assets in whole yen.
+        """
         return decimal.Decimal(
             sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
         ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def deposit(self, amount: decimal.Decimal, year: int):
+        """
+        Deposit a positive amount in ``year`` within the configured limits.
+        """
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -617,11 +724,17 @@ class NisaAccount:
         self.year_to_deposit_map[year] += amount
 
     def advance_one_year(self, investment_returns: dict[str, decimal.Decimal]):
+        """
+        Apply annual returns by asset name.
+        """
 
         for name, asset in self.asset_map.items():
             asset.advance_one_year(investment_returns[name])
 
     def withdraw(self, desired_cash: decimal.Decimal):
+        """
+        Withdraw a non-negative amount according to the configured sale plan.
+        """
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
@@ -639,33 +752,60 @@ class NisaAccount:
 
 
 class InvestmentManager(typing.Protocol):
+    """
+    Define the portfolio operations required by a finance simulation.
+    """
 
     simulation_start_year: int
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
+        """
+        Return the gross value of managed accounts.
+        """
         ...
 
     @property
     def after_tax_portfolio_value(self) -> decimal.Decimal:
+        """
+        Return the estimated portfolio value available after tax.
+        """
         ...
 
     def advance_one_year(self, investment_returns: dict):
+        """
+        Apply annual returns to all managed accounts.
+        """
         ...
 
     def deposit(self, amount: decimal.Decimal, age: int):
+        """
+        Invest a positive amount for the given age.
+        """
         ...
 
     def withdraw(self, desired_cash: decimal.Decimal):
+        """
+        Raise the requested cash from managed accounts.
+        """
         ...
 
     def optimize_investments(self):
+        """
+        Apply transfers and account actions due under the investment policy.
+        """
         ...
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
+        """
+        Return account-level values and the total portfolio value.
+        """
         ...
 
     def get_formatted_portfolio_summary_description(self) -> str:
+        """
+        Return a human-readable summary of the managed portfolio.
+        """
         ...
 
 
@@ -679,7 +819,8 @@ type _WithdrawableInvestmentAccount = (
 
 @dataclasses.dataclass(frozen=True)
 class _DepositAction:
-    """Encapsulate a prioritized deposit operation for one account.
+    """
+    Encapsulate a prioritized deposit operation for one account.
 
     ``deposit_up_to`` performs the deposit and returns the amount deposited.
     ``account_name`` is used in log messages.
@@ -691,7 +832,9 @@ class _DepositAction:
 
 @dataclasses.dataclass(frozen=True)
 class _WithdrawalSource:
-    """Describe an account's available cash and withdrawal priority."""
+    """
+    Describe an account's available cash and withdrawal priority.
+    """
 
     account: _WithdrawableInvestmentAccount
     available_cash: decimal.Decimal
@@ -700,10 +843,14 @@ class _WithdrawalSource:
 
 class SimpleInvestmentManager:
     """
-    Investment manager with a strategy that:
+    Manage the configured accounts using a fixed contribution policy.
+
+    The manager:
+
     - prioritizes depositing into iDeCo, NISA, and then ordinary account
     - prioritizes withdrawing from ordinary account, old NISA, and then NISA
-    - withdraws half iDeCO funds at pension start time,
+    - transfers due old NISA holdings and the modeled iDeCo lump sum
+    - moves ordinary account funds into NISA when contribution room remains
     """
 
     def __init__(
@@ -743,7 +890,9 @@ class SimpleInvestmentManager:
 
     @property
     def _configured_accounts(self) -> dict[str, _ConfiguredInvestmentAccount]:
-        """Return configured accounts in their stable portfolio order."""
+        """
+        Return configured accounts in their stable portfolio order.
+        """
 
         return {
             account_name: account
@@ -760,7 +909,8 @@ class SimpleInvestmentManager:
         self,
         age: int,
     ) -> list[_DepositAction]:
-        """Build deposit operations in account priority order.
+        """
+        Build deposit operations in account priority order.
 
         Each action caps the requested amount according to the account's remaining
         capacity, performs the deposit, and returns the deposited amount.
@@ -830,7 +980,9 @@ class SimpleInvestmentManager:
         return actions
 
     def _build_withdrawal_sources(self) -> list[_WithdrawalSource]:
-        """Build withdrawal sources in account priority order."""
+        """
+        Build withdrawal sources in account priority order.
+        """
 
         sources: list[_WithdrawalSource] = []
 
@@ -865,6 +1017,9 @@ class SimpleInvestmentManager:
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
+        """
+        Return the gross value of all managed accounts.
+        """
         return sum(
             (account.portfolio_value for account in self._configured_accounts.values()),
             decimal.Decimal(0),
@@ -872,6 +1027,9 @@ class SimpleInvestmentManager:
 
     @property
     def after_tax_portfolio_value(self) -> decimal.Decimal:
+        """
+        Return the modeled cash value after ordinary-account capital gains tax.
+        """
         return sum(
             (
                 account.max_cash_withdrawal
@@ -883,6 +1041,9 @@ class SimpleInvestmentManager:
         )
 
     def advance_one_year(self, investment_returns: dict):
+        """
+        Apply one year's returns and advance the manager's calendar year.
+        """
 
         for account in self._configured_accounts.values():
             if isinstance(account, OldNisaAccount):
@@ -893,6 +1054,9 @@ class SimpleInvestmentManager:
         self.current_year += 1
 
     def deposit(self, amount: decimal.Decimal, age: int):
+        """
+        Deposit surplus funds using the manager's account priority.
+        """
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -918,6 +1082,9 @@ class SimpleInvestmentManager:
             )
 
     def withdraw(self, desired_cash: decimal.Decimal):
+        """
+        Raise cash using ordinary, old NISA, then NISA holdings.
+        """
 
         desired_cash = desired_cash.quantize(constants.YEN, decimal.ROUND_UP)
 
@@ -945,7 +1112,7 @@ class SimpleInvestmentManager:
 
     def optimize_investments(self):
         """
-        Optimize investments based on the investment policy.
+        Apply account transfers due under the configured investment policy.
         """
 
         # Check if any old nisa account portfolio has to be liquidated
@@ -1021,6 +1188,9 @@ class SimpleInvestmentManager:
                 )
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
+        """
+        Return account-level values and the total portfolio value.
+        """
 
         account_values = {
             account_name: account.portfolio_value
@@ -1033,6 +1203,9 @@ class SimpleInvestmentManager:
         }
 
     def get_formatted_portfolio_summary_description(self) -> str:
+        """
+        Format portfolio values in millions of yen for display or logging.
+        """
 
         return "\n".join(
             f"{key}: {value / constants.MILLION:.3f} mln yen"

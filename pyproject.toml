@@ -23,10 +23,12 @@ dependencies = [
 dev = [
     "codespell",
     "icecream",
+    "mkdocstrings-python",
     "pycodestyle",
     "pyright",
     "pytest",
-    "ruff"
+    "ruff",
+    "zensical"
 ]
 
 [tool.ruff]
