@@ -1,5 +1,8 @@
 # Changelog
 
+### 0.6.1
+- improved - ProportionalAssetPurchaseStrategy.allocate now doesn't include in return value assets that would have nothing allocated to them
+
 ### 0.6.0
 - improved - renamed a large number of classes from investment module so as to improve clarity
 - improved - account objects sent to SimpleInvestmentManager are now optional
