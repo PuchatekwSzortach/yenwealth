@@ -10,14 +10,13 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.14"
 dependencies = [
-    "arch",
-    "beartype",
-    "loky",
-    "numpy",
-    "pandas",
-    "pydantic",
-    "returns",
-    "tqdm"
+    "arch>=8.0.0",
+    "beartype>=0.22.2",
+    "loky>=3.5.2",
+    "numpy>=2.4.0",
+    "pandas>=2.3.3",
+    "pydantic>=2.12.1",
+    "tqdm>=4.68.3"
 ]
 
 [project.optional-dependencies]
