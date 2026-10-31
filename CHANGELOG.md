@@ -1,5 +1,8 @@
 # Changelog
 
+### 0.6.2
+- improved - added documentation
+
 ### 0.6.1
 - improved - ProportionalAssetPurchaseStrategy.allocate now doesn't include in return value assets that would have nothing allocated to them
 
