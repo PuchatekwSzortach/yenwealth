@@ -23,11 +23,17 @@ dependencies = [
 dev = [
     "codespell",
     "icecream",
+    "mkdocstrings-python",
     "pycodestyle",
     "pyright",
     "pytest",
-    "ruff"
+    "ruff",
+    "zensical"
 ]
+
+[tool.pyright]
+  include = ["src", "tests", "examples", "scripts"]
+  exclude = ["site"]
 
 [tool.ruff]
 line-length = 120

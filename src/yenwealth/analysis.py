@@ -13,15 +13,24 @@ import yenwealth.utilities
 
 @dataclasses.dataclass(frozen=True)
 class FinancialTarget:
+    """
+    Describe a target net portfolio value at a particular age.
+    """
 
     age: int
     net_portfolio_value: decimal.Decimal
 
 
 class SimulationAnalyzer:
+    """
+    Summarize how often simulations meet financial targets.
+    """
 
     def get_target_hit_count_map(
             self, simulations: list[pandas.DataFrame], targets: list[FinancialTarget]) -> dict[FinancialTarget, int]:
+        """
+        Count simulations meeting each target at its specified age.
+        """
 
         counter = collections.Counter()
 
@@ -44,6 +53,9 @@ class SimulationAnalyzer:
         return dict(counter)
 
     def get_report(self, simulations: list[pandas.DataFrame], targets: list[FinancialTarget]) -> str:
+        """
+        Format target hit counts and percentages as a readable report.
+        """
 
         hit_count = self.get_target_hit_count_map(simulations=simulations, targets=targets)
 

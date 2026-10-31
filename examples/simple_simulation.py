@@ -4,7 +4,6 @@ execute a simulation using the FinancesSimulator class.
 """
 
 import decimal
-import logging
 
 import pandas
 
@@ -14,9 +13,6 @@ import yenwealth.utilities
 
 
 def main():
-
-    logging.basicConfig(level=logging.ERROR)
-    logger = logging.getLogger(__name__)
 
     simulation_start_age = 30
     simulation_end_age = 85
@@ -110,7 +106,7 @@ def main():
     )
 
     simulation_result = yenwealth.simulations.FinancesSimulator(inputs=inputs).run_simulation()
-    logger.info(yenwealth.utilities.pretty_format_simulation_summary(simulation_result))
+    print(yenwealth.utilities.pretty_format_simulation_summary(simulation_result))
 
 
 if __name__ == "__main__":

@@ -4,7 +4,6 @@ execute a number of simulations using the MonteCarloSimulator class, and analyze
 """
 
 import decimal
-import logging
 import random
 
 import pandas
@@ -15,9 +14,6 @@ import yenwealth.simulations
 
 
 def main():
-
-    logging.basicConfig(level=logging.WARNING)
-    logger = logging.getLogger(__name__)
 
     simulation_start_age = 30
     simulation_end_age = 85
@@ -120,7 +116,7 @@ def main():
         ]
     )
 
-    logger.info("\n" + report)
+    print(report)
 
 if __name__ == "__main__":
     main()

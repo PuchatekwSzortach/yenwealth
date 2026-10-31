@@ -21,12 +21,20 @@ LOGGER = logging.getLogger(__name__)
 
 
 class EconomicDataSimulator:
+    """
+    Resample historical economic data into a simulated annual path.
+    """
 
     def __init__(self, historical_economic_data: core.EconomicData):
 
         self.historical_economic_data = historical_economic_data
 
     def generate_simulation(self, start: int, period: int, block_size: int) -> core.EconomicData:
+        """
+        Create a stationary-bootstrap path with ``period`` annual rows.
+
+        The returned rows use consecutive years beginning at ``start``.
+        """
 
         economic_data_index = self.historical_economic_data.inflation_over_time.index.to_numpy()
 
@@ -54,6 +62,9 @@ class EconomicDataSimulator:
 
 @dataclasses.dataclass(frozen=True)
 class FinancesSimulatorParameters:
+    """
+    Set the inclusive age range and first calendar year for one projection.
+    """
 
     simulation_start_age: int
     simulation_end_age: int
@@ -67,6 +78,9 @@ class FinancesSimulatorParameters:
 
 @dataclasses.dataclass
 class FinancesSimulatorRuntime:
+    """
+    Provide the manager and age-based income and living-cost callables.
+    """
 
     investment_manager: investments.InvestmentManager
     earned_annual_income_callable: core.EarnedAnnualIncome
@@ -75,6 +89,9 @@ class FinancesSimulatorRuntime:
 
 @dataclasses.dataclass
 class FinancesSimulatorInputs:
+    """
+    Bundle parameters, runtime behavior, and one economic data path.
+    """
 
     parameters: FinancesSimulatorParameters
     runtime: FinancesSimulatorRuntime
@@ -83,6 +100,9 @@ class FinancesSimulatorInputs:
 
 @dataclasses.dataclass(frozen=True)
 class MonteCarloSimulatorParameters:
+    """
+    Set the inclusive age range, starting year, and positive scenario count.
+    """
 
     simulation_start_age: int
     simulation_end_age: int
@@ -99,6 +119,9 @@ class MonteCarloSimulatorParameters:
 
 
 class FinancesSimulator:
+    """
+    Run one year-by-year personal finance projection.
+    """
 
     def __init__(self, inputs: FinancesSimulatorInputs):
 
@@ -106,6 +129,13 @@ class FinancesSimulator:
         self.investment_manager = self.inputs.runtime.investment_manager
 
     def run_simulation(self) -> pandas.DataFrame:
+        """
+        Run the projection and return portfolio values indexed by age.
+
+        Each year applies the investment policy, income and living costs, and
+        returns after inflation. If a withdrawal cannot be met, later rows are
+        returned with missing values.
+        """
 
         current_age = self.inputs.parameters.simulation_start_age
         current_year = self.inputs.parameters.simulation_start_year
@@ -233,6 +263,9 @@ class FinancesSimulator:
 
 @dataclasses.dataclass
 class MonteCarloSimulatorInputs:
+    """
+    Bundle scenario settings, a runtime factory, and historical data.
+    """
 
     parameters: MonteCarloSimulatorParameters
     runtime_factory: typing.Callable[[], FinancesSimulatorRuntime]
@@ -267,12 +300,18 @@ def _run_single_simulation(
 
 
 class MonteCarloSimulator:
+    """
+    Run independent finance projections on bootstrapped economic paths.
+    """
 
     def __init__(self, inputs: MonteCarloSimulatorInputs):
 
         self.inputs = inputs
 
     def run_simulations(self) -> list[pandas.DataFrame]:
+        """
+        Return one age-indexed result frame for each requested scenario.
+        """
 
         economic_data_simulator = EconomicDataSimulator(
             historical_economic_data=self.inputs.historical_economic_data
