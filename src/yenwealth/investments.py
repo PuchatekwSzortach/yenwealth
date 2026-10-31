@@ -1158,6 +1158,12 @@ class SimpleInvestmentManager:
                     f"Withdrew tax-free lump sum of {utilities.format_million_yen(tax_free_lump_sum)} "
                     "from iDeCo account")
 
+            self.ideco_investment_account.start_pension_scheme(age=self._current_age)
+
+            LOGGER.debug(
+                f"Started iDeCo pension mode at age {self._current_age}"
+            )
+
         if (
             self.ordinary_investment_account is not None
             and self.nisa_account is not None
