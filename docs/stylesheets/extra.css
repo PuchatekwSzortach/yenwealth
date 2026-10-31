@@ -1,0 +1,9 @@
+.md-grid {
+  max-width: 1440px;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  width: 2.4rem;
+  height: 2.4rem;
+}

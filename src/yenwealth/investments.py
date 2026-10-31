@@ -22,8 +22,6 @@ class InsufficientFunds(Exception):
     Raise when an account cannot satisfy a requested withdrawal.
     """
 
-    pass
-
 
 @beartype.beartype
 class Asset:

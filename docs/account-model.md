@@ -7,9 +7,7 @@ configured strategies.
 
 ## Accounts
 
-- `OrdinaryInvestmentAccount` taxes positive investment gains when estimating
-  the cash available after tax. Its capital gains tax rate defaults to
-  `0.20325` and can be overridden.
+- `OrdinaryInvestmentAccount` taxes investment gains according to the configured capital gain tax
 - `IdecoInvestmentAccount` accepts contributions before its configured maximum
   deposit age and exposes pension withdrawals over a configured period. The
   payout plan validates a start age from 60 through 75 and a payout period from
@@ -26,7 +24,7 @@ for financial or tax planning.
 
 ## Deposit and withdrawal order
 
-`SimpleInvestmentManager` implements the current account policy:
+`SimpleInvestmentManager` implements the following investment plan:
 
 - Deposits go to iDeCo first, then NISA, then the ordinary account. It raises an
   error if configured tax-advantaged accounts reach their limits and no

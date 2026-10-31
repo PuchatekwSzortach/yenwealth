@@ -6,7 +6,9 @@ pycodestyle ./src ./tests
 pytest
 ruff check .
 pyright
-codespell .
+codespell . --skip site
 
-python examples/simple_simulation.py
-python examples/monte_carlo_simulation.py
+python scripts/sync_front_page_example.py --check
+python examples/front_page.py > /dev/null
+python examples/simple_simulation.py > /dev/null
+python examples/monte_carlo_simulation.py > /dev/null

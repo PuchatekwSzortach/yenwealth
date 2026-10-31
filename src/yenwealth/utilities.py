@@ -32,5 +32,9 @@ def pretty_format_simulation_summary(simulation_summary_frame: pandas.DataFrame)
     return "\n" + transformed_frame.to_string(
         index=False,
         formatters={
-            col: lambda x: f"{x:.3f}" for col in monetary_columns
+            "age": lambda value: f"{value:.0f}",
+            **{
+                f"{col} (mln yen)": lambda value: f"{value:.3f}"
+                for col in monetary_columns
+            },
         })

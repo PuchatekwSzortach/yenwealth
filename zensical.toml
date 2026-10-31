@@ -6,6 +6,7 @@ repo_url = "https://github.com/PuchatekwSzortach/yenwealth"
 edit_uri = "edit/main/docs/"
 docs_dir = "docs"
 site_dir = "site"
+extra_css = ["stylesheets/extra.css"]
 nav = [
     { "Home" = "index.md" },
     { "Getting started" = "getting-started.md" },
@@ -20,12 +21,17 @@ nav = [
 
 [project.theme]
 language = "en"
+logo = "assets/logo.png"
+favicon = "assets/favicon.png"
 features = [
     "navigation.sections",
     "content.code.copy",
     "search.suggest",
     "search.highlight",
 ]
+
+[project.markdown_extensions]
+pymdownx.snippets = {}
 
 [project.plugins.api-autonav]
 modules = ["src/yenwealth"]
@@ -40,4 +46,8 @@ paths = ["src"]
 
 [project.plugins.mkdocstrings.handlers.python.options]
 docstring_style = "google"
+merge_init_into_class = true
+separate_signature = true
+show_signature_annotations = true
+signature_crossrefs = true
 show_source = true

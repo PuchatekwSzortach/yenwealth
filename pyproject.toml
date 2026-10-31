@@ -31,5 +31,9 @@ dev = [
     "zensical"
 ]
 
+[tool.pyright]
+  include = ["src", "tests", "examples", "scripts"]
+  exclude = ["site"]
+
 [tool.ruff]
 line-length = 120
