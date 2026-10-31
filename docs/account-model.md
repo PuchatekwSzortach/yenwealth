@@ -11,7 +11,9 @@ configured strategies.
 - `IdecoInvestmentAccount` accepts contributions before its configured maximum
   deposit age and exposes pension withdrawals over a configured period. The
   payout plan validates a start age from 60 through 75 and a payout period from
-  5 through 20 years.
+  5 through 20 years. `SimpleInvestmentManager` starts pension mode at the
+  configured start age after transferring the modeled tax-free lump sum. The
+  user's income callback must still withdraw each periodic payment.
 - `OldNisaAccount` keeps investments grouped by purchase year, withdraws from
   the oldest year first, and requires a purchase year's holdings to be
   liquidated after 20 years.
@@ -30,12 +32,13 @@ for financial or tax planning.
   error if configured tax-advantaged accounts reach their limits and no
   ordinary account can accept the remainder.
 - Withdrawals come from the ordinary account first, then old NISA, then NISA.
-  Periodic iDeCo pension withdrawals are exposed on the account API; the
-  manager currently transfers only the modeled tax-free lump sum automatically.
-- At the iDeCo pension start age, it withdraws the modeled tax-free lump sum
-  and transfers it to the ordinary account. It also moves old NISA holdings
-  after their 20-year period and can move funds from the ordinary account into
-  NISA within the configured contribution limits.
+  Periodic iDeCo pension payments are not part of this withdrawal order. The
+  income callback must call `withdraw_pension(age)` and include each payment in
+  annual income.
+- At the iDeCo pension start age, the manager transfers the modeled tax-free
+  lump sum to the ordinary account and starts pension mode. It also moves old
+  NISA holdings after their 20-year period and can move funds from the ordinary
+  account into NISA within the configured contribution limits.
 
 ## Strategies
 

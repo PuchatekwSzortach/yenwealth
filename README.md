@@ -1,18 +1,20 @@
 # yenwealth
 
-Financial planning tools for individuals living in Japan.
-
-yenwealth simulates annual income, living costs, investment returns, and
-Japanese investment accounts. The model is under active development.
+yenwealth is a Python framework for simulating long-term personal finances for individuals living in Japan.
+It aims to make it easy to run long term "what if" financial simulations involving investments held in tax advantaged accounts in Japan.
 
 ## Documentation
 
 Read the [yenwealth documentation](https://puchatekwszortach.github.io/yenwealth/)
 for setup instructions, model behavior, examples, and the Python API reference.
 
+### Installation
+
+Install with `pip install yenwealth`
+
 ## Examples
 
-This example runs a deterministic simulation using ordinary and NISA accounts.
+Here's a minimal example showing a single, deterministic simulation that uses ordinary and NISA accounts:
 
 <!-- front_page_example:start -->
 ```python
@@ -103,6 +105,8 @@ if __name__ == "__main__":
     main()
 ```
 <!-- front_page_example:end -->
+
+While this shows the very basics, other files in `examples` show more realistic scenarios.
 
 - [`examples/simple_simulation.py`](examples/simple_simulation.py) runs one
   deterministic projection.
