@@ -36,9 +36,9 @@ for financial or tax planning.
   income callback must call `withdraw_pension(age)` and include each payment in
   annual income.
 - At the iDeCo pension start age, the manager transfers the modeled tax-free
-  lump sum to the ordinary account and starts pension mode. It also moves old
-  NISA holdings after their 20-year period and can move funds from the ordinary
-  account into NISA within the configured contribution limits.
+  lump sum to the ordinary account and starts pension mode.
+- The manager liquidates old NISA holdings after their 20-year limit passes, depositing proceedings into an ordinary account. It can also move funds from the ordinary account into NISA within the configured
+  contribution limits.
 
 ## Strategies
 

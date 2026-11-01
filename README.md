@@ -1,7 +1,7 @@
 # yenwealth
 
 yenwealth is a Python framework for simulating long-term personal finances for individuals living in Japan.
-It aims to make it easy to run long term "what if" financial simulations involving investments held in tax advantaged accounts in Japan.
+It aims to make it easy to run long term "what if" financial simulations involving investments held in tax advantaged accounts (iDeCo, NISA, 旧NISA) in Japan.
 
 ## Documentation
 

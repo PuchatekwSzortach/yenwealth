@@ -1,6 +1,7 @@
 # Changelog
 
 ### 0.6.2
+- improved - SimpleInvestmentManager now calls start_pension_scheme at the appropriate age for a configured iDeCo account
 - improved - added documentation
 
 ### 0.6.1

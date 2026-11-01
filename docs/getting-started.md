@@ -4,26 +4,6 @@
 
 Install with `pip install yenwealth`
 
-## Run an example
-
-The deterministic example builds one `FinancesSimulatorInputs` object, runs a
-single projection, and formats the result:
-
-```sh
-python examples/simple_simulation.py
-```
-
-The Monte Carlo example uses historical economic data to generate multiple
-scenarios and reports how often selected portfolio targets are reached:
-
-```sh
-python examples/monte_carlo_simulation.py
-```
-
-Each example constructs investment accounts, income and cost callables, and
-economic data in Python. Start from the example closest to your use case and
-replace those inputs with your own assumptions.
-
 ## Inputs for a simulation
 
 Two required inputs are `annual_costs_callable` and
@@ -62,7 +42,7 @@ def earned_annual_income(age):
 
     payout_plan = ideco_account.ideco_pension_payout_plan
     payout_end_age = payout_plan.start_age + payout_plan.period_in_years
-    
+
     if payout_plan.start_age <= age < payout_end_age:
         income += ideco_account.withdraw_pension(age)
 
@@ -80,3 +60,23 @@ portfolio values stay in roughly the simulation's starting-year purchasing
 power. Income, costs, and starting balances are not inflation-adjusted; provide
 them on that same basis, and encode real changes in income or costs in your
 age-based callables.
+
+## Run an example
+
+The deterministic example builds one `FinancesSimulatorInputs` object, runs a
+single projection, and formats the result:
+
+```sh
+python examples/simple_simulation.py
+```
+
+The Monte Carlo example uses historical economic data to generate multiple
+scenarios and reports how often selected portfolio targets are reached:
+
+```sh
+python examples/monte_carlo_simulation.py
+```
+
+Each example constructs investment accounts, income and cost callables, and
+economic data in Python. Start from the example closest to your use case and
+replace those inputs with your own assumptions.
