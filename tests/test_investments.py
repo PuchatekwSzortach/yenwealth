@@ -1847,3 +1847,26 @@ class TestSimpleInvestmentManager:
         assert investment_manager.nisa_account is not None
         assert investment_manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
         assert investment_manager.ordinary_investment_account.asset_map['VOO'].principal == decimal.Decimal(6_400_000)
+        assert investment_manager.ideco_investment_account.has_started_drawing_pension is True
+
+    def test_optimize_investments_starts_ideco_pension_at_configured_age(self, investment_manager):
+
+        ideco_account = investment_manager.ideco_investment_account
+        assert ideco_account is not None
+        ideco_account.asset_map["VOO"].principal = decimal.Decimal(50_000_000)
+
+        investment_manager.current_year = 2068  # Age 74, one year before configured start age.
+        investment_manager.optimize_investments()
+
+        assert ideco_account.has_started_drawing_pension is False
+
+        investment_manager.current_year = 2069  # Age 75, configured start age.
+        investment_manager.optimize_investments()
+
+        assert ideco_account.has_started_drawing_pension is True
+        assert ideco_account.portfolio_value > 0
+
+        pension_payment = ideco_account.withdraw_pension(age=75)
+
+        assert pension_payment > 0
+        assert ideco_account.pension_payout_ages == [75]
