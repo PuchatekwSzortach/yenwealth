@@ -28,6 +28,7 @@ class FakeInvestmentManager:
         self.current_year = simulation_start_year
 
         self.calls = []
+        self.investment_returns = []
 
     def get_formatted_portfolio_summary_description(self) -> str:
         return "fake portfolio"
@@ -45,6 +46,7 @@ class FakeInvestmentManager:
 
     def advance_one_year(self, investment_returns: dict):
         self.current_year += 1
+        self.investment_returns.append(investment_returns)
         self.calls.append(("advance_one_year", self.current_year))
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
@@ -283,6 +285,33 @@ def test_income_equal_to_costs_causes_neither():
     called_methods = {call[0] for call in investment_manager.calls}
     assert "withdraw" not in called_methods
     assert "deposit" not in called_methods
+
+
+def test_simulation_converts_numeric_callback_and_economic_data_values_to_decimal():
+
+    investment_manager = FakeInvestmentManager(
+        portfolio_value=decimal.Decimal(100),
+        after_tax_portfolio_value=decimal.Decimal(100),
+        simulation_start_year=2026
+    )
+
+    inputs = make_inputs(
+        investment_manager,
+        costs=decimal.Decimal(0),
+        income=decimal.Decimal(0),
+        start_age=50,
+        start_year=2026,
+        end_age=50,
+    )
+    inputs.runtime.annual_costs_callable = lambda age: 100
+    inputs.runtime.earned_annual_income_callable = lambda age: 80.25
+
+    result = yenwealth.simulations.FinancesSimulator(inputs).run_simulation()
+
+    assert ("withdraw", decimal.Decimal("19.75")) in investment_manager.calls
+    assert result.at[50, "cost_of_living"] == decimal.Decimal(100)
+    assert isinstance(result.at[50, "cost_of_living"], decimal.Decimal)
+    assert investment_manager.investment_returns == [{"S&P500": decimal.Decimal("0.07")}]
 
 
 def test_callables_are_called_with_correct_ages():

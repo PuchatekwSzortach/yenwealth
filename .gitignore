@@ -220,3 +220,5 @@ __marimo__/
 *.code-workspace
 
 .vscode/settings.json
+
+feature_specs
