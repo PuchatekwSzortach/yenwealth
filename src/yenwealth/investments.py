@@ -3,6 +3,7 @@ Module with investment logic
 """
 
 import collections
+import collections.abc
 import copy
 import dataclasses
 import decimal
@@ -12,7 +13,7 @@ import typing
 import beartype
 import pydantic
 
-from . import constants, utilities
+from . import constants, numeric, utilities
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,14 +32,14 @@ class Asset:
 
     def __init__(
             self, name: str,
-            principal: decimal.Decimal,
-            gain: decimal.Decimal,
-            annual_management_cost_rate: decimal.Decimal):
+            principal: numeric.DecimalInput,
+            gain: numeric.DecimalInput,
+            annual_management_cost_rate: numeric.DecimalInput):
 
         self.name = name
-        self.principal = principal
-        self.gain = gain
-        self.annual_management_cost_rate = annual_management_cost_rate
+        self.principal = numeric.to_decimal(principal)
+        self.gain = numeric.to_decimal(gain)
+        self.annual_management_cost_rate = numeric.to_decimal(annual_management_cost_rate)
 
     @property
     def value(self) -> decimal.Decimal:
@@ -47,17 +48,20 @@ class Asset:
         """
         return (self.principal + self.gain).quantize(constants.YEN, decimal.ROUND_DOWN)
 
-    def advance_one_year(self, change_rate: decimal.Decimal):
+    def advance_one_year(self, change_rate: numeric.DecimalInput):
         """
         Apply an annual return rate after the asset management cost.
         """
 
+        change_rate = numeric.to_decimal(change_rate)
         self.gain += self.value * (change_rate - self.annual_management_cost_rate)
 
-    def sell(self, amount: decimal.Decimal):
+    def sell(self, amount: numeric.DecimalInput):
         """
         Sell ``amount`` yen, reducing principal and gain proportionally.
         """
+
+        amount = numeric.to_decimal(amount)
 
         if amount < 0:
             raise ValueError(f"amount value should be non-negative, got {amount}")
@@ -75,10 +79,12 @@ class Asset:
         self.principal -= withdrawal_from_principal
         self.gain -= withdrawal_from_gain
 
-    def buy(self, amount: decimal.Decimal):
+    def buy(self, amount: numeric.DecimalInput):
         """
         Add a positive deposit to the asset principal.
         """
+
+        amount = numeric.to_decimal(amount)
 
         if amount <= 0:
             raise ValueError(f"amount value should be non-negative, got {amount}")
@@ -99,7 +105,7 @@ class AssetPurchaseStrategy(typing.Protocol):
 
     def allocate(
         self,
-        amount: decimal.Decimal,
+        amount: numeric.DecimalInput,
         assets: list[str],
     ) -> dict[str, decimal.Decimal]:
         """
@@ -113,18 +119,23 @@ class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
     Allocate deposits across assets in proportion to configured weights.
     """
 
-    def __init__(self, weights: dict[str, decimal.Decimal]):
+    @beartype.beartype
+    def __init__(self, weights: collections.abc.Mapping[str, numeric.DecimalInput]):
 
         if len(weights.keys()) == 0:
             raise ValueError("At least one asset name must be provided")
 
-        self.weights = weights
+        self.weights: dict[str, decimal.Decimal] = {
+            asset: numeric.to_decimal(weight)
+            for asset, weight in weights.items()
+        }
 
     @property
     def asset_names(self) -> set[str]:
         return set(self.weights)
 
-    def allocate(self, amount: decimal.Decimal, assets: list[str]) -> dict[str, decimal.Decimal]:
+    @beartype.beartype
+    def allocate(self, amount: numeric.DecimalInput, assets: list[str]) -> dict[str, decimal.Decimal]:
         """
         Allocate ``amount`` across ``assets`` using normalized weights.
 
@@ -132,6 +143,7 @@ class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
         have a configured weight, and their combined weight must be positive.
         """
 
+        amount = numeric.to_decimal(amount)
         missing = set(assets) - self.weights.keys()
 
         if missing:
@@ -167,8 +179,8 @@ class AssetSaleStrategy(typing.Protocol):
 
     def calculate_withdrawal_amounts(
         self,
-        amount: decimal.Decimal,
-        asset_map: dict[str, decimal.Decimal],
+        amount: numeric.DecimalInput,
+        asset_map: collections.abc.Mapping[str, numeric.DecimalInput],
     ) -> dict[str, decimal.Decimal]:
         """
         Return an asset-to-sale map that raises the requested cash.
@@ -210,16 +222,23 @@ class SequentialAssetSaleStrategy(AssetSaleStrategy):
     def asset_names(self) -> set[str]:
         return set(self.sale_order)
 
+    @beartype.beartype
     def calculate_withdrawal_amounts(
         self,
-        amount: decimal.Decimal,
-        asset_map: dict[str, decimal.Decimal],
+        amount: numeric.DecimalInput,
+        asset_map: collections.abc.Mapping[str, numeric.DecimalInput],
     ) -> dict[str, decimal.Decimal]:
         """
         Plan sales in ``sale_order`` using the available asset values.
         """
 
-        target_asset_map = {name: value for (name, value) in asset_map.items() if name in set(self.sale_order)}
+        amount = numeric.to_decimal(amount)
+
+        target_asset_map = {
+            name: numeric.to_decimal(value)
+            for name, value in asset_map.items()
+            if name in set(self.sale_order)
+        }
 
         asset_value = sum(target_asset_map.values(), decimal.Decimal(0)).quantize(constants.YEN, decimal.ROUND_DOWN)
 
