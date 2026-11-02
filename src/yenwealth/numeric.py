@@ -5,6 +5,11 @@ Shared numeric input types and conversion helpers.
 import decimal
 
 type DecimalInput = decimal.Decimal | int | float
+"""
+Union of: ``Decimal``, ``int``, or ``float``.
+
+In most cases, logic accepting ``DecimalInput`` will convert it to ``decimal.Decimal`` before running any computations.
+"""
 
 
 def to_decimal(value: object) -> decimal.Decimal:

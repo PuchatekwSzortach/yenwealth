@@ -1,5 +1,7 @@
 import decimal
+import typing
 
+import beartype.roar
 import pytest
 
 import yenwealth.constants
@@ -97,6 +99,78 @@ class TestAsset:
         assert asset.gain == decimal.Decimal(60)
         assert asset.value == decimal.Decimal(180)
 
+    def test_init_converts_supported_numeric_values(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=100,
+            gain=0.5,
+            annual_management_cost_rate=0.1,
+        )
+
+        assert asset.principal == decimal.Decimal(100)
+        assert asset.gain == decimal.Decimal("0.5")
+        assert asset.annual_management_cost_rate == decimal.Decimal("0.1")
+        assert type(asset.principal) is decimal.Decimal
+        assert type(asset.gain) is decimal.Decimal
+        assert type(asset.annual_management_cost_rate) is decimal.Decimal
+
+    def test_operations_convert_numeric_inputs_before_calculation(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(60),
+            annual_management_cost_rate=decimal.Decimal("0.1"),
+        )
+
+        asset.sell(50.0)
+
+        assert asset.principal == decimal.Decimal("68.75")
+        assert asset.gain == decimal.Decimal("41.25")
+        assert type(asset.principal) is decimal.Decimal
+        assert type(asset.gain) is decimal.Decimal
+
+        asset.advance_one_year(change_rate=0.15)
+
+        assert asset.gain == decimal.Decimal("46.75")
+        assert type(asset.gain) is decimal.Decimal
+
+        asset.buy(20)
+
+        assert asset.principal == decimal.Decimal("88.75")
+        assert type(asset.principal) is decimal.Decimal
+
+    @pytest.mark.parametrize(
+        ("value", "error_type"),
+        [
+            ("100", beartype.roar.BeartypeCallHintParamViolation),
+            (None, beartype.roar.BeartypeCallHintParamViolation),
+            (True, TypeError),
+        ],
+    )
+    def test_init_rejects_unsupported_numeric_values(self, value, error_type):
+
+        with pytest.raises(error_type):
+            yenwealth.investments.Asset(
+                name="whatever",
+                principal=value,
+                gain=decimal.Decimal(0),
+                annual_management_cost_rate=decimal.Decimal(0),
+            )
+
+    def test_buy_rejects_unsupported_numeric_value(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal(100),
+            gain=decimal.Decimal(0),
+            annual_management_cost_rate=decimal.Decimal(0),
+        )
+
+        with pytest.raises(beartype.roar.BeartypeCallHintParamViolation):
+            asset.buy(typing.cast(typing.Any, "20"))
+
 
 class TestInvestmentStrategy:
 
@@ -150,6 +224,40 @@ class TestProportionalAssetPurchaseStrategy:
             "VGT": decimal.Decimal(10000),
         }
 
+    def test_converts_numeric_weights_and_allocation_amount(self):
+
+        strategy = yenwealth.investments.ProportionalAssetPurchaseStrategy(
+            {"VGT": 1, "S&P500": 2.0}
+        )
+
+        assert strategy.weights == {
+            "VGT": decimal.Decimal(1),
+            "S&P500": decimal.Decimal("2.0"),
+        }
+        assert all(type(weight) is decimal.Decimal for weight in strategy.weights.values())
+
+        result = strategy.allocate(15000.0, ["VGT", "S&P500"])
+
+        assert result == {
+            "VGT": decimal.Decimal(5000),
+            "S&P500": decimal.Decimal(10000),
+        }
+        assert all(type(amount) is decimal.Decimal for amount in result.values())
+
+    def test_rejects_unsupported_numeric_weight_and_amount(self):
+
+        with pytest.raises(beartype.roar.BeartypeCallHintParamViolation):
+            yenwealth.investments.ProportionalAssetPurchaseStrategy(
+                typing.cast(typing.Any, {"VGT": "1"})
+            )
+
+        strategy = yenwealth.investments.ProportionalAssetPurchaseStrategy(
+            {"VGT": decimal.Decimal(1)}
+        )
+
+        with pytest.raises(beartype.roar.BeartypeCallHintParamViolation):
+            strategy.allocate(typing.cast(typing.Any, "100"), ["VGT"])
+
 
 class TestSequentialAssetSaleStrategy:
 
@@ -185,6 +293,37 @@ class TestSequentialAssetSaleStrategy:
             "VGG": decimal.Decimal(10000),
             "VGT": decimal.Decimal(5000),
         }
+
+    def test_converts_numeric_withdrawal_amount_and_asset_values(self):
+
+        strategy = yenwealth.investments.SequentialAssetSaleStrategy(["VGG", "VGT"])
+
+        result = strategy.calculate_withdrawal_amounts(
+            15000,
+            {"VGG": 10000, "VGT": 20000.0},
+        )
+
+        assert result == {
+            "VGG": decimal.Decimal(10000),
+            "VGT": decimal.Decimal(5000),
+        }
+        assert all(type(amount) is decimal.Decimal for amount in result.values())
+
+    def test_rejects_unsupported_numeric_withdrawal_amount_and_asset_value(self):
+
+        strategy = yenwealth.investments.SequentialAssetSaleStrategy(["VGG"])
+
+        with pytest.raises(beartype.roar.BeartypeCallHintParamViolation):
+            strategy.calculate_withdrawal_amounts(
+                typing.cast(typing.Any, "10"),
+                {"VGG": decimal.Decimal(100)},
+            )
+
+        with pytest.raises(beartype.roar.BeartypeCallHintParamViolation):
+            strategy.calculate_withdrawal_amounts(
+                10,
+                typing.cast(typing.Any, {"VGG": "100"}),
+            )
 
     def test_raises_if_all_assets_are_insufficient(self):
 
