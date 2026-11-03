@@ -20,9 +20,8 @@ configured strategies.
 - `NisaAccount` tracks annual and total contribution usage and allows
   tax-free withdrawals from its holdings.
 
-The account behavior and limits described here reflect the current
-implementation. Review the source before relying on a limit or tax assumption
-for financial or tax planning.
+The rules and limits on this page are software models intended to reflect
+Japanese requirements as of 2026. Verify current rules before relying on them.
 
 ## Numeric inputs
 
