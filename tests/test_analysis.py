@@ -5,11 +5,25 @@ Tests for analysis module
 import decimal
 
 import pandas
+import pytest
 
 import yenwealth.analysis
 
 
 class TestSimulationAnalyzer:
+
+    def test_financial_target_converts_numeric_values_to_decimal(self):
+
+        target = yenwealth.analysis.FinancialTarget(age=60, net_portfolio_value=0.1)
+
+        assert target.net_portfolio_value == decimal.Decimal("0.1")
+        assert type(target.net_portfolio_value) is decimal.Decimal
+
+    @pytest.mark.parametrize("value", [True, "100"])
+    def test_financial_target_rejects_unsupported_values(self, value):
+
+        with pytest.raises(TypeError, match="Expected a Decimal, int, or float"):
+            yenwealth.analysis.FinancialTarget(age=60, net_portfolio_value=value)
 
     def test_get_target_hit_count_map_against_single_simulation(self):
 

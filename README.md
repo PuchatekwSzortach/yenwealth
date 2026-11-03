@@ -34,7 +34,7 @@ def main() -> None:
     simulation_start_year = 2020
 
     asset_purchase_strategy = yenwealth.investments.ProportionalAssetPurchaseStrategy(
-        weights={"VOO": decimal.Decimal("1.0")}
+        weights={"VOO": 1.0}
     )
     asset_sale_strategy = yenwealth.investments.SequentialAssetSaleStrategy(sale_order=["VOO"])
 
@@ -45,11 +45,11 @@ def main() -> None:
 
     simulated_economic_data = yenwealth.simulations.core.EconomicData(
         return_on_assets_over_time=pandas.DataFrame(
-            {"VOO": [decimal.Decimal("0.05")] * len(economic_data_index)},
+            {"VOO": [0.05] * len(economic_data_index)},
             index=economic_data_index,
         ),
         inflation_over_time=pandas.DataFrame(
-            {"inflation_rate": [decimal.Decimal("0.02")] * len(economic_data_index)},
+            {"inflation_rate": [0.02] * len(economic_data_index)},
             index=economic_data_index,
         ),
     )
@@ -61,18 +61,18 @@ def main() -> None:
             simulation_start_year=simulation_start_year,
         ),
         runtime=yenwealth.simulations.FinancesSimulatorRuntime(
-            annual_costs_callable=lambda age: decimal.Decimal(4_000_000),
+            annual_costs_callable=lambda age: 4_000_000,
             earned_annual_income_callable=lambda age: (
-                decimal.Decimal(5_000_000) if age < 65 else decimal.Decimal(2_000_000)
+                5_000_000 if age < 65 else decimal.Decimal(2_000_000)
             ),
             investment_manager=yenwealth.investments.SimpleInvestmentManager(
                 ordinary_investment_account=yenwealth.investments.OrdinaryInvestmentAccount(
                     asset_map={
                         "VOO": yenwealth.investments.Asset(
                             name="VOO",
-                            principal=decimal.Decimal(1_000_000),
-                            gain=decimal.Decimal(0),
-                            annual_management_cost_rate=decimal.Decimal("0.001"),
+                            principal=1_000_000,
+                            gain=0,
+                            annual_management_cost_rate=0.001,
                         )
                     },
                     asset_purchase_strategy=asset_purchase_strategy,
@@ -82,9 +82,9 @@ def main() -> None:
                     asset_map={
                         "VOO": yenwealth.investments.Asset(
                             name="VOO",
-                            principal=decimal.Decimal(500_000),
-                            gain=decimal.Decimal(0),
-                            annual_management_cost_rate=decimal.Decimal("0.001"),
+                            principal=500_000,
+                            gain=0,
+                            annual_management_cost_rate=0.001,
                         )
                     },
                     asset_purchase_strategy=asset_purchase_strategy,
