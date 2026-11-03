@@ -2,6 +2,7 @@
 Tests for simulations module
 """
 
+import collections.abc
 import decimal
 
 import numpy
@@ -10,6 +11,7 @@ import pytest
 
 import yenwealth.core
 import yenwealth.investments
+import yenwealth.numeric
 import yenwealth.simulations
 
 
@@ -36,15 +38,20 @@ class FakeInvestmentManager:
     def optimize_investments(self):
         self.calls.append(("optimize_investments", self.current_year))
 
-    def withdraw(self, desired_cash: decimal.Decimal):
+    def withdraw(self, desired_cash: yenwealth.numeric.DecimalInput):
+        desired_cash = yenwealth.numeric.to_decimal(desired_cash)
         self.calls.append(("withdraw", desired_cash))
         self.portfolio_value -= desired_cash
 
-    def deposit(self, amount: decimal.Decimal, age: int):
+    def deposit(self, amount: yenwealth.numeric.DecimalInput, age: int):
+        amount = yenwealth.numeric.to_decimal(amount)
         self.calls.append(("deposit", amount, age))
         self.portfolio_value += amount
 
-    def advance_one_year(self, investment_returns: dict):
+    def advance_one_year(
+        self,
+        investment_returns: collections.abc.Mapping[str, yenwealth.numeric.DecimalInput],
+    ):
         self.current_year += 1
         self.investment_returns.append(investment_returns)
         self.calls.append(("advance_one_year", self.current_year))
@@ -59,8 +66,8 @@ def make_inputs(
     start_age: int,
     start_year: int,
     end_age: int,
-    costs: decimal.Decimal,
-    income: decimal.Decimal,
+    costs: yenwealth.numeric.DecimalInput,
+    income: yenwealth.numeric.DecimalInput,
 ):
 
     simulation_steps = end_age - start_age + 1
@@ -150,6 +157,41 @@ def test_simulation_contains_initial_state():
     assert result.at[50, "gross_portfolio_value"] == decimal.Decimal(123)
     assert result.at[50, "net_portfolio_value"] == decimal.Decimal(100)
     assert result.at[50, "cost_of_living"] == decimal.Decimal(100)
+
+
+def test_mixed_numeric_inputs_keep_simulation_outputs_as_decimal():
+
+    asset = yenwealth.investments.Asset(
+        name="S&P500",
+        principal=100,
+        gain=0,
+        annual_management_cost_rate=0.0,
+    )
+    strategy = yenwealth.investments.ProportionalAssetPurchaseStrategy({"S&P500": 1})
+    manager = yenwealth.investments.SimpleInvestmentManager(
+        ordinary_investment_account=yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={"S&P500": asset},
+            asset_purchase_strategy=strategy,
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["S&P500"]),
+        ),
+        simulation_start_age=50,
+        simulation_start_year=2026,
+    )
+    inputs = make_inputs(
+        manager,
+        start_age=50,
+        start_year=2026,
+        end_age=50,
+        costs=0,
+        income=0,
+    )
+
+    result = yenwealth.simulations.FinancesSimulator(inputs).run_simulation()
+
+    assert result.at[50, "gross_portfolio_value"] == decimal.Decimal(107)
+    assert type(result.at[50, "gross_portfolio_value"]) is decimal.Decimal
+    assert type(result.at[50, "net_portfolio_value"]) is decimal.Decimal
+    assert type(result.at[50, "cost_of_living"]) is decimal.Decimal
 
 
 def test_simulation_runs_until_end_age():

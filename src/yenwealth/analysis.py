@@ -8,6 +8,7 @@ import decimal
 
 import pandas
 
+import yenwealth.numeric
 import yenwealth.utilities
 
 
@@ -18,7 +19,14 @@ class FinancialTarget:
     """
 
     age: int
-    net_portfolio_value: decimal.Decimal
+    net_portfolio_value: yenwealth.numeric.DecimalInput
+
+    def __post_init__(self):
+        """
+        Store target values as Decimal for analysis comparisons.
+        """
+
+        object.__setattr__(self, "net_portfolio_value", yenwealth.numeric.to_decimal(self.net_portfolio_value))
 
 
 class SimulationAnalyzer:

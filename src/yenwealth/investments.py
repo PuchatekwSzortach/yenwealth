@@ -18,6 +18,16 @@ from . import constants, numeric, utilities
 LOGGER = logging.getLogger(__name__)
 
 
+def _to_decimal_map(
+    values: collections.abc.Mapping[str, numeric.DecimalInput],
+) -> dict[str, decimal.Decimal]:
+    """
+    Convert map values to Decimal.
+    """
+
+    return {name: numeric.to_decimal(value) for name, value in values.items()}
+
+
 class InsufficientFunds(Exception):
     """
     Raise when an account cannot satisfy a requested withdrawal.
@@ -280,10 +290,10 @@ class OrdinaryInvestmentAccount:
         asset_map: dict[str, Asset],
         asset_purchase_strategy: AssetPurchaseStrategy,
         asset_sale_strategy: AssetSaleStrategy,
-        capital_gain_tax_rate: decimal.Decimal = decimal.Decimal("0.20325")
+        capital_gain_tax_rate: numeric.DecimalInput = decimal.Decimal("0.20325")
     ):
 
-        self.capital_gain_tax_rate = capital_gain_tax_rate
+        self.capital_gain_tax_rate = numeric.to_decimal(capital_gain_tax_rate)
         self.asset_map = asset_map
         self.asset_purchase_strategy = asset_purchase_strategy
         self.asset_sale_strategy = asset_sale_strategy
@@ -306,10 +316,12 @@ class OrdinaryInvestmentAccount:
             sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
         ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
-    def deposit(self, amount: decimal.Decimal):
+    def deposit(self, amount: numeric.DecimalInput):
         """
         Allocate a positive deposit across the account's assets.
         """
+
+        amount = numeric.to_decimal(amount)
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -322,13 +334,15 @@ class OrdinaryInvestmentAccount:
         for name, allocation in allocations.items():
             self.asset_map[name].buy(allocation)
 
-    def advance_one_year(self, investment_returns: dict[str, decimal.Decimal]):
+    def advance_one_year(self, investment_returns: collections.abc.Mapping[str, numeric.DecimalInput]):
         """
         Apply annual returns by asset name.
         """
 
+        decimal_returns = _to_decimal_map(investment_returns)
+
         for name, asset in self.asset_map.items():
-            asset.advance_one_year(investment_returns[name])
+            asset.advance_one_year(decimal_returns[name])
 
     def _get_net_asset_value(self, asset: Asset) -> decimal.Decimal:
         taxable_gain = max(asset.gain, decimal.Decimal(0))
@@ -341,10 +355,12 @@ class OrdinaryInvestmentAccount:
             for name, asset in self.asset_map.items()
         }
 
-    def withdraw(self, desired_cash: decimal.Decimal):
+    def withdraw(self, desired_cash: numeric.DecimalInput):
         """
         Sell enough assets to provide ``desired_cash`` after modeled tax.
         """
+
+        desired_cash = numeric.to_decimal(desired_cash)
 
         if desired_cash > self.max_cash_withdrawal:
             raise InsufficientFunds(
@@ -437,10 +453,12 @@ class IdecoInvestmentAccount:
             sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
         ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
-    def deposit(self, amount: decimal.Decimal, age: int):
+    def deposit(self, amount: numeric.DecimalInput, age: int):
         """
         Deposit a positive contribution before pension payout begins.
         """
+
+        amount = numeric.to_decimal(amount)
 
         if self.has_started_drawing_pension:
             raise ValueError("Cannot deposit after pension drawing has started")
@@ -463,13 +481,15 @@ class IdecoInvestmentAccount:
         for name, allocation in allocations.items():
             self.asset_map[name].buy(allocation)
 
-    def advance_one_year(self, investment_returns: dict[str, decimal.Decimal]):
+    def advance_one_year(self, investment_returns: collections.abc.Mapping[str, numeric.DecimalInput]):
         """
         Apply annual returns by asset name.
         """
 
+        decimal_returns = _to_decimal_map(investment_returns)
+
         for name, asset in self.asset_map.items():
-            asset.advance_one_year(investment_returns[name])
+            asset.advance_one_year(decimal_returns[name])
 
     def start_pension_scheme(self, age: int):
         """
@@ -578,10 +598,16 @@ class OldNisaAccount:
             strategies={"asset_sale_strategy": self.asset_sale_strategy}
         )
 
-    def advance_one_year(self, investment_returns: dict[str, decimal.Decimal], year: int):
+    def advance_one_year(
+        self,
+        investment_returns: collections.abc.Mapping[str, numeric.DecimalInput],
+        year: int,
+    ):
         """
         Apply returns and reject holdings that passed the modeled expiry.
         """
+
+        decimal_returns = _to_decimal_map(investment_returns)
 
         for investment_year, asset_map in self.year_to_asset_map.items():
 
@@ -589,7 +615,7 @@ class OldNisaAccount:
                 raise ValueError(f"nisa investment for year {investment_year} must be liquidated")
 
             for name, asset in asset_map.items():
-                asset.advance_one_year(investment_returns[name])
+                asset.advance_one_year(decimal_returns[name])
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
@@ -607,12 +633,13 @@ class OldNisaAccount:
     def withdraw_for_year(
         self,
         portfolio_year: int,
-        desired_cash: decimal.Decimal
+        desired_cash: numeric.DecimalInput
     ):
         """
         Withdraw ``desired_cash`` from holdings bought in ``portfolio_year``.
         """
 
+        desired_cash = numeric.to_decimal(desired_cash)
         asset_map = self.year_to_asset_map[portfolio_year]
         portfolio_value = decimal.Decimal(sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
 
@@ -627,10 +654,12 @@ class OldNisaAccount:
         for name, withdrawal in withdrawals.items():
             asset_map[name].sell(withdrawal)
 
-    def withdraw(self, desired_cash: decimal.Decimal):
+    def withdraw(self, desired_cash: numeric.DecimalInput):
         """
         Withdraw from investment years in oldest-to-newest order.
         """
+
+        desired_cash = numeric.to_decimal(desired_cash)
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
@@ -708,10 +737,12 @@ class NisaAccount:
             sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
         ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
-    def deposit(self, amount: decimal.Decimal, year: int):
+    def deposit(self, amount: numeric.DecimalInput, year: int):
         """
         Deposit a positive amount in ``year`` within the configured limits.
         """
+
+        amount = numeric.to_decimal(amount)
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -740,18 +771,22 @@ class NisaAccount:
 
         self.year_to_deposit_map[year] += amount
 
-    def advance_one_year(self, investment_returns: dict[str, decimal.Decimal]):
+    def advance_one_year(self, investment_returns: collections.abc.Mapping[str, numeric.DecimalInput]):
         """
         Apply annual returns by asset name.
         """
 
-        for name, asset in self.asset_map.items():
-            asset.advance_one_year(investment_returns[name])
+        decimal_returns = _to_decimal_map(investment_returns)
 
-    def withdraw(self, desired_cash: decimal.Decimal):
+        for name, asset in self.asset_map.items():
+            asset.advance_one_year(decimal_returns[name])
+
+    def withdraw(self, desired_cash: numeric.DecimalInput):
         """
         Withdraw a non-negative amount according to the configured sale plan.
         """
+
+        desired_cash = numeric.to_decimal(desired_cash)
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
@@ -789,19 +824,19 @@ class InvestmentManager(typing.Protocol):
         """
         ...
 
-    def advance_one_year(self, investment_returns: dict):
+    def advance_one_year(self, investment_returns: collections.abc.Mapping[str, numeric.DecimalInput]):
         """
         Apply annual returns to all managed accounts.
         """
         ...
 
-    def deposit(self, amount: decimal.Decimal, age: int):
+    def deposit(self, amount: numeric.DecimalInput, age: int):
         """
         Invest a positive amount for the given age.
         """
         ...
 
-    def withdraw(self, desired_cash: decimal.Decimal):
+    def withdraw(self, desired_cash: numeric.DecimalInput):
         """
         Raise the requested cash from managed accounts.
         """
@@ -858,6 +893,7 @@ class _WithdrawalSource:
     account_name: str
 
 
+@beartype.beartype
 class SimpleInvestmentManager:
     """
     Manage the configured accounts using a fixed contribution policy.
@@ -1057,23 +1093,27 @@ class SimpleInvestmentManager:
             decimal.Decimal(0),
         )
 
-    def advance_one_year(self, investment_returns: dict):
+    def advance_one_year(self, investment_returns: collections.abc.Mapping[str, numeric.DecimalInput]):
         """
         Apply one year's returns and advance the manager's calendar year.
         """
 
+        decimal_returns = _to_decimal_map(investment_returns)
+
         for account in self._configured_accounts.values():
             if isinstance(account, OldNisaAccount):
-                account.advance_one_year(investment_returns, self.current_year)
+                account.advance_one_year(decimal_returns, self.current_year)
             else:
-                account.advance_one_year(investment_returns)
+                account.advance_one_year(decimal_returns)
 
         self.current_year += 1
 
-    def deposit(self, amount: decimal.Decimal, age: int):
+    def deposit(self, amount: numeric.DecimalInput, age: int):
         """
         Deposit surplus funds using the manager's account priority.
         """
+
+        amount = numeric.to_decimal(amount)
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -1098,12 +1138,12 @@ class SimpleInvestmentManager:
                 "and deposit limits of other available accounts were exhausted"
             )
 
-    def withdraw(self, desired_cash: decimal.Decimal):
+    def withdraw(self, desired_cash: numeric.DecimalInput):
         """
         Raise cash using ordinary, old NISA, then NISA holdings.
         """
 
-        desired_cash = desired_cash.quantize(constants.YEN, decimal.ROUND_UP)
+        desired_cash = numeric.to_decimal(desired_cash).quantize(constants.YEN, decimal.ROUND_UP)
 
         if desired_cash <= 0:
             raise ValueError(f"Withdrawal value should be positive, got {desired_cash}")

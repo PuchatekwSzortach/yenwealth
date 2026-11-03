@@ -8,8 +8,8 @@ Install with `pip install yenwealth`
 
 Two required inputs are `annual_costs_callable` and
 `earned_annual_income_callable`. Each callable takes an age and returns an
-annual `decimal.Decimal` amount in yen. Age-based logic can model changes such
-as retirement, childcare costs, or other income.
+annual `decimal.Decimal`, `int`, or `float` amount in yen. Age-based logic can
+model changes such as retirement, childcare costs, or other income.
 
 Each year, the simulator compares income and costs. When income is below costs,
 it withdraws the shortfall from accounts supported by the investment manager.

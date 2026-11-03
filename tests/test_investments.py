@@ -664,6 +664,66 @@ class TestOrdinaryInvestmentAccount:
                 asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VGT"])
             )
 
+    def test_converts_numeric_tax_rate_deposits_returns_and_withdrawals(self):
+
+        asset = yenwealth.investments.Asset(
+            name="VOO",
+            principal=100,
+            gain=0,
+            annual_management_cost_rate=0,
+        )
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={"VOO": asset},
+            asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy({"VOO": 1}),
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"]),
+            capital_gain_tax_rate=0.2,
+        )
+
+        account.deposit(10.5)
+        account.advance_one_year({"VOO": 0.1})
+        account.withdraw(2)
+
+        assert account.capital_gain_tax_rate == decimal.Decimal("0.2")
+        assert type(account.capital_gain_tax_rate) is decimal.Decimal
+        assert type(asset.principal) is decimal.Decimal
+        assert type(asset.gain) is decimal.Decimal
+
+    def test_deposit_rejects_unsupported_numeric_amount(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=100,
+                    gain=0,
+                    annual_management_cost_rate=0,
+                )
+            },
+            asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy({"VOO": 1}),
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"]),
+        )
+
+        with pytest.raises(beartype.roar.BeartypeCallHintParamViolation):
+            account.deposit(typing.cast(typing.Any, "10"))
+
+    def test_advance_one_year_rejects_boolean_return(self):
+
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=100,
+                    gain=0,
+                    annual_management_cost_rate=0,
+                )
+            },
+            asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy({"VOO": 1}),
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"]),
+        )
+
+        with pytest.raises(TypeError, match="bool is not accepted"):
+            account.advance_one_year({"VOO": True})
+
 
 class TestIdecoInvestmentAccount:
 
@@ -704,6 +764,29 @@ class TestIdecoInvestmentAccount:
         )
 
         assert ideco.portfolio_value == decimal.Decimal(40)
+
+    def test_converts_numeric_deposits_and_returns(self):
+
+        asset = yenwealth.investments.Asset(
+            name="VOO",
+            principal=100,
+            gain=0,
+            annual_management_cost_rate=0,
+        )
+        account = yenwealth.investments.IdecoInvestmentAccount(
+            asset_map={"VOO": asset},
+            contribution_start_year=2020,
+            asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy({"VOO": 1}),
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"]),
+            ideco_pension_payout_plan=self.create_payout_plan(start_age=65, period_in_years=10),
+        )
+
+        account.deposit(20.5, age=40)
+        account.advance_one_year({"VOO": 0.1})
+
+        assert type(asset.principal) is decimal.Decimal
+        assert type(asset.gain) is decimal.Decimal
+        assert asset.principal == decimal.Decimal("120.5")
 
     def test_deposit_succeeds_before_pension_and_fails_after(self):
 
@@ -1019,6 +1102,29 @@ class TestOldNisaAccount:
             asset_sale_strategy=asset_sale_strategy
         )
 
+    def test_converts_numeric_returns_and_withdrawals(self):
+
+        account = self.build_account(
+            year_to_asset_map={
+                2020: {
+                    "VOO": yenwealth.investments.Asset(
+                        name="VOO",
+                        principal=100,
+                        gain=0,
+                        annual_management_cost_rate=0,
+                    )
+                }
+            }
+        )
+
+        account.advance_one_year({"VOO": 0.1}, year=2021)
+        account.withdraw_for_year(portfolio_year=2020, desired_cash=5.5)
+        account.withdraw(2)
+
+        asset = account.year_to_asset_map[2020]["VOO"]
+        assert type(asset.principal) is decimal.Decimal
+        assert type(asset.gain) is decimal.Decimal
+
     def test_advance_one_year(self):
 
         nisa = self.build_account(
@@ -1179,6 +1285,24 @@ class TestNisaAccount:
             asset_purchase_strategy=asset_purchase_strategy,
             asset_sale_strategy=asset_sale_strategy
         )
+
+    def test_converts_numeric_deposits_returns_and_withdrawals(self):
+
+        asset = yenwealth.investments.Asset(
+            name="VOO",
+            principal=100,
+            gain=0,
+            annual_management_cost_rate=0,
+        )
+        account = self.build_account({"VOO": asset})
+
+        account.deposit(20.5, year=2025)
+        account.advance_one_year({"VOO": 0.1})
+        account.withdraw(2)
+
+        assert type(account.year_to_deposit_map[2025]) is decimal.Decimal
+        assert type(asset.principal) is decimal.Decimal
+        assert type(asset.gain) is decimal.Decimal
 
     def test_initial_deposit_over_max_limit(self):
 
@@ -2009,3 +2133,30 @@ class TestSimpleInvestmentManager:
 
         assert pension_payment > 0
         assert ideco_account.pension_payout_ages == [75]
+
+    def test_converts_numeric_deposits_returns_and_withdrawals(self):
+
+        asset = yenwealth.investments.Asset(
+            name="VOO",
+            principal=0,
+            gain=0,
+            annual_management_cost_rate=0,
+        )
+        account = yenwealth.investments.OrdinaryInvestmentAccount(
+            asset_map={"VOO": asset},
+            asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy({"VOO": 1}),
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"]),
+        )
+        manager = yenwealth.investments.SimpleInvestmentManager(
+            ordinary_investment_account=account,
+            simulation_start_age=30,
+            simulation_start_year=2025,
+        )
+
+        manager.deposit(10.5, age=30)
+        manager.advance_one_year({"VOO": 0.1})
+        manager.withdraw(2)
+
+        assert type(asset.principal) is decimal.Decimal
+        assert type(asset.gain) is decimal.Decimal
+        assert type(manager.portfolio_value) is decimal.Decimal

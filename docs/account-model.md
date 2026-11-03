@@ -24,6 +24,15 @@ The account behavior and limits described here reflect the current
 implementation. Review the source before relying on a limit or tax assumption
 for financial or tax planning.
 
+## Numeric inputs
+
+Account deposits, withdrawals, tax rates, return maps, and strategy weights
+accept `decimal.Decimal`, `int`, and `float` values. yenwealth converts each
+value to `decimal.Decimal` before arithmetic. Float conversion uses
+`decimal.Decimal(str(value))`; for example, `0.1` becomes
+`Decimal("0.1")`. Calculated account values remain `decimal.Decimal`.
+Booleans and strings are not numeric inputs.
+
 ## Deposit and withdrawal order
 
 `SimpleInvestmentManager` implements the following investment plan:
