@@ -27,8 +27,9 @@ configured strategies.
 - `NisaAccount` tracks annual and total contribution usage and allows
   tax-free withdrawals from its holdings.
 
-The rules and limits on this page are software models intended to reflect
-Japanese requirements as of 2026. Verify current rules before relying on them.
+yenwealth aims to model Japanese account rules and limits in force as of
+December 2026. Check the latest Japanese account rules and limits with official
+sources before relying on the results.
 
 ## Numeric inputs
 
