@@ -8,12 +8,19 @@ configured strategies.
 ## Accounts
 
 - `OrdinaryInvestmentAccount` taxes investment gains according to the configured capital gain tax
-- `IdecoInvestmentAccount` accepts contributions before its configured maximum
-  deposit age and exposes pension withdrawals over a configured period. The
-  payout plan validates a start age from 60 through 75 and a payout period from
-  5 through 20 years. `SimpleInvestmentManager` starts pension mode at the
-  configured start age after transferring the modeled tax-free lump sum. The
-  user's income callback must still withdraw each periodic payment.
+- `IdecoInvestmentAccount` requires an `IdecoContributorCategory` and applies
+  the December 2026 contribution limits in every simulated year. Category 1 has
+  a ¥900,000 annual shared limit; employees without a corporate pension have a
+  ¥744,000 annual limit. Category 1 and employees with a corporate pension can
+  pass `annual_contributions_to_other_pensions_in_yen` to subtract annual
+  National Pension Fund or corporate pension contributions from their shared
+  annual limit. This value is required for the corporate-pension category and
+  defaults to zero for Category 1. Contributions are allowed before age 70, assuming
+  eligibility for ages 65 through 69. The payout plan validates a start age
+  from 60 through 75 and a payout period from 5 through 20 years.
+  `SimpleInvestmentManager` starts pension mode at the configured start age
+  after transferring the modeled tax-free lump sum. The user's income callback
+  must still withdraw each periodic payment.
 - `OldNisaAccount` keeps investments grouped by purchase year, withdraws from
   the oldest year first, and requires a purchase year's holdings to be
   liquidated after 20 years.
