@@ -38,6 +38,10 @@ modules = ["src/yenwealth"]
 api_root_uri = "reference"
 nav_section_title = "API reference"
 
+[project.plugins.api-autonav.module_options."yenwealth.investments"]
+# Enum values are public attributes without docstrings, so the default filter hides them.
+show_if_no_docstring = true
+
 [project.plugins.mkdocstrings]
 default_handler = "python"
 

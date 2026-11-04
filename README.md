@@ -115,7 +115,7 @@ While this shows the very basics, other files in `examples` show more realistic 
 
 ## Disclaimer
 
-The Japanese account rules and limits modeled by yenwealth are intended to reflect requirements in
-effect as of 2026. Laws and guidance can change, and the model may not cover every case. yenwealth
-is for simulation and educational purposes; it does not provide financial, investment, tax, or
+yenwealth aims to model Japanese account rules and limits valid as of December 2026. Laws and guidance
+can change, and the model may not cover every case. yenwealth is for simulation and educational
+purposes; it does not provide financial, investment, tax, or
 legal advice. Check current requirements with official sources or a qualified professional.

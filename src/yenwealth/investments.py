@@ -7,6 +7,7 @@ import collections.abc
 import copy
 import dataclasses
 import decimal
+import enum
 import logging
 import typing
 
@@ -408,6 +409,19 @@ class IdecoPensionPayoutPlan(pydantic.BaseModel):
     period_in_years: int = pydantic.Field(ge=5, le=20)
 
 
+class IdecoContributorCategory(enum.Enum):
+    """
+    Identify the modeled iDeCo contribution category.
+
+    Category 1 includes eligible self-employed people, farmers, students, and
+    unemployed people insured under National Pension Category 1.
+    """
+
+    CATEGORY_1_SELF_EMPLOYED_AND_OTHERS = "category_1"
+    EMPLOYEE_WITHOUT_CORPORATE_PENSION = "employee_without_corporate_pension"
+    EMPLOYEE_WITH_CORPORATE_PENSION = "employee_with_corporate_pension"
+
+
 @beartype.beartype
 class IdecoInvestmentAccount:
     """
@@ -420,7 +434,9 @@ class IdecoInvestmentAccount:
         contribution_start_year: int,
         asset_purchase_strategy: AssetPurchaseStrategy,
         asset_sale_strategy: AssetSaleStrategy,
-        ideco_pension_payout_plan: IdecoPensionPayoutPlan
+        ideco_pension_payout_plan: IdecoPensionPayoutPlan,
+        contributor_category: IdecoContributorCategory,
+        annual_contributions_to_other_pensions_in_yen: numeric.DecimalInput | None = None,
     ):
 
         self.asset_map = asset_map
@@ -428,6 +444,7 @@ class IdecoInvestmentAccount:
         self.asset_purchase_strategy = asset_purchase_strategy
         self.asset_sale_strategy = asset_sale_strategy
         self.ideco_pension_payout_plan = ideco_pension_payout_plan
+        self.contributor_category = contributor_category
 
         _validate_strategy_asset_names(
             account_name="ideco investment account",
@@ -438,11 +455,53 @@ class IdecoInvestmentAccount:
             }
         )
 
-        self.max_annual_contribution = decimal.Decimal("0.276") * constants.MILLION
-        self.max_deposit_age = 65
+        self.max_annual_contribution = self._calculate_max_annual_contribution(
+            contributor_category=contributor_category,
+            annual_contributions_to_other_pensions_in_yen=annual_contributions_to_other_pensions_in_yen,
+        )
+
+        self.max_deposit_age = 70
 
         self.has_started_drawing_pension = False
         self.pension_payout_ages: list[int] = []
+
+    @staticmethod
+    def _calculate_max_annual_contribution(
+        contributor_category: IdecoContributorCategory,
+        annual_contributions_to_other_pensions_in_yen: numeric.DecimalInput | None,
+    ) -> decimal.Decimal:
+        """
+        Validate other annual pension contributions and return the iDeCo limit.
+        """
+
+        annual_limit = decimal.Decimal(744_000)
+
+        if contributor_category == IdecoContributorCategory.CATEGORY_1_SELF_EMPLOYED_AND_OTHERS:
+            annual_limit = decimal.Decimal(900_000)
+
+        if annual_contributions_to_other_pensions_in_yen is None:
+            if contributor_category == IdecoContributorCategory.EMPLOYEE_WITH_CORPORATE_PENSION:
+                raise ValueError(
+                    "annual_contributions_to_other_pensions_in_yen is required for employees with a corporate pension"
+                )
+            other_annual_contributions = decimal.Decimal(0)
+        else:
+            other_annual_contributions = numeric.to_decimal(annual_contributions_to_other_pensions_in_yen)
+
+        if other_annual_contributions < 0:
+            raise ValueError("annual_contributions_to_other_pensions_in_yen cannot be negative")
+
+        if (
+            contributor_category == IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION
+            and other_annual_contributions != 0
+        ):
+            message = (
+                "annual_contributions_to_other_pensions_in_yen is not supported "
+                "for employees without a corporate pension"
+            )
+            raise ValueError(message)
+
+        return max(decimal.Decimal(0), annual_limit - other_annual_contributions)
 
     @property
     def portfolio_value(self) -> decimal.Decimal:
@@ -972,7 +1031,11 @@ class SimpleInvestmentManager:
         actions: list[_DepositAction] = []
         ideco_account = self.ideco_investment_account
 
-        if ideco_account is not None and age < ideco_account.max_deposit_age:
+        if (
+            ideco_account is not None
+            and age < ideco_account.max_deposit_age
+            and not ideco_account.has_started_drawing_pension
+        ):
 
             def deposit_to_ideco(requested_amount: decimal.Decimal) -> decimal.Decimal:
                 amount = min(requested_amount, ideco_account.max_annual_contribution)

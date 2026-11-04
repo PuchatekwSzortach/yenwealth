@@ -54,6 +54,7 @@ def create_simulation_inputs(
             )
         },
         contribution_start_year=2015,
+        contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
         asset_purchase_strategy=asset_purchase_strategy,
         asset_sale_strategy=asset_sale_strategy,
         ideco_pension_payout_plan=ideco_payout_plan,

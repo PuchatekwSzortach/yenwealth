@@ -751,11 +751,115 @@ class TestIdecoInvestmentAccount:
             )
         }
 
+    @staticmethod
+    def create_account(
+        contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
+        annual_contributions_to_other_pensions_in_yen=None,
+    ):
+        return yenwealth.investments.IdecoInvestmentAccount(
+            asset_map={
+                "VOO": yenwealth.investments.Asset(
+                    name="VOO",
+                    principal=decimal.Decimal(0),
+                    gain=decimal.Decimal(0),
+                    annual_management_cost_rate=decimal.Decimal(0),
+                )
+            },
+            contribution_start_year=2020,
+            asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy({"VOO": 1}),
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"]),
+            ideco_pension_payout_plan=TestIdecoInvestmentAccount.create_payout_plan(),
+            contributor_category=contributor_category,
+            annual_contributions_to_other_pensions_in_yen=annual_contributions_to_other_pensions_in_yen,
+        )
+
+    @pytest.mark.parametrize(
+        ("category", "annual_contributions_to_other_pensions_in_yen", "expected_annual_limit"),
+        [
+            (
+                yenwealth.investments.IdecoContributorCategory.CATEGORY_1_SELF_EMPLOYED_AND_OTHERS,
+                None,
+                decimal.Decimal(900_000),
+            ),
+            (
+                yenwealth.investments.IdecoContributorCategory.CATEGORY_1_SELF_EMPLOYED_AND_OTHERS,
+                120_000,
+                decimal.Decimal(780_000),
+            ),
+            (
+                yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
+                None,
+                decimal.Decimal(744_000),
+            ),
+            (
+                yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITH_CORPORATE_PENSION,
+                240_000,
+                decimal.Decimal(504_000),
+            ),
+            (
+                yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITH_CORPORATE_PENSION,
+                744_000,
+                decimal.Decimal(0),
+            ),
+        ],
+    )
+    def test_max_annual_contribution_limit_by_category_and_other_pension_contributions(
+        self, category, annual_contributions_to_other_pensions_in_yen, expected_annual_limit
+    ):
+
+        account = self.create_account(
+            contributor_category=category,
+            annual_contributions_to_other_pensions_in_yen=annual_contributions_to_other_pensions_in_yen,
+        )
+
+        assert account.max_annual_contribution == expected_annual_limit
+
+    def test_deposit_accepts_annual_limit_and_rejects_amount_above_it(self):
+
+        account = self.create_account()
+        account.deposit(account.max_annual_contribution, age=40)
+
+        over_limit_account = self.create_account()
+        with pytest.raises(ValueError, match="exceeds maximum allowed contribution"):
+            over_limit_account.deposit(over_limit_account.max_annual_contribution + 1, age=40)
+
+    def test_deposit_is_allowed_through_age_69_but_not_at_age_70(self):
+
+        account = self.create_account()
+        account.deposit(decimal.Decimal(1), age=69)
+
+        with pytest.raises(ValueError, match="maximum allowed deposit age of 70"):
+            account.deposit(decimal.Decimal(1), age=70)
+
+    def test_corporate_pension_category_requires_annual_contribution_to_other_pensions(self):
+
+        with pytest.raises(ValueError, match="annual_contributions_to_other_pensions_in_yen is required"):
+            self.create_account(
+                contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITH_CORPORATE_PENSION
+            )
+
+    def test_rejects_negative_annual_contribution_to_other_pensions(self):
+
+        with pytest.raises(ValueError, match="cannot be negative"):
+            self.create_account(
+                contributor_category=yenwealth.investments.IdecoContributorCategory.CATEGORY_1_SELF_EMPLOYED_AND_OTHERS,
+                annual_contributions_to_other_pensions_in_yen=-1,
+            )
+
+    def test_rejects_other_pension_contribution_for_employee_without_corporate_pension(self):
+
+        with pytest.raises(ValueError, match="is not supported for employees without a corporate pension"):
+            self.create_account(
+                contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
+                annual_contributions_to_other_pensions_in_yen=1,
+            )
+
     def test_portfolio_value(self):
 
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
@@ -776,6 +880,7 @@ class TestIdecoInvestmentAccount:
         account = yenwealth.investments.IdecoInvestmentAccount(
             asset_map={"VOO": asset},
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy({"VOO": 1}),
             asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["VOO"]),
             ideco_pension_payout_plan=self.create_payout_plan(start_age=65, period_in_years=10),
@@ -793,6 +898,7 @@ class TestIdecoInvestmentAccount:
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(3)}
             ),
@@ -818,6 +924,7 @@ class TestIdecoInvestmentAccount:
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
@@ -840,6 +947,7 @@ class TestIdecoInvestmentAccount:
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
@@ -867,6 +975,7 @@ class TestIdecoInvestmentAccount:
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
@@ -899,6 +1008,7 @@ class TestIdecoInvestmentAccount:
                 )
             },
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
@@ -943,6 +1053,7 @@ class TestIdecoInvestmentAccount:
         ideco = yenwealth.investments.IdecoInvestmentAccount(
             asset_map=self.asset_map(),
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
@@ -976,6 +1087,7 @@ class TestIdecoInvestmentAccount:
                 )
             },
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
             ),
@@ -1009,6 +1121,7 @@ class TestIdecoInvestmentAccount:
                     )
                 },
                 contribution_start_year=2020,
+                contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
                 asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                     weights={"VGT": decimal.Decimal(1)}
                 ),
@@ -1035,6 +1148,7 @@ class TestIdecoInvestmentAccount:
                     )
                 },
                 contribution_start_year=2020,
+                contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
                 asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                     weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1), "SPY": decimal.Decimal(1)}
                 ),
@@ -1061,6 +1175,7 @@ class TestIdecoInvestmentAccount:
                     )
                 },
                 contribution_start_year=2020,
+                contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
                 asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                     weights={"VGT": decimal.Decimal(1), "VOO": decimal.Decimal(1)}
                 ),
@@ -1519,6 +1634,7 @@ class TestSimpleInvestmentManager:
                 )
             },
             contribution_start_year=2020,
+            contributor_category=yenwealth.investments.IdecoContributorCategory.EMPLOYEE_WITHOUT_CORPORATE_PENSION,
             asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
                 weights={"VOO": decimal.Decimal(1)}
             ),
@@ -1670,15 +1786,24 @@ class TestSimpleInvestmentManager:
             old_nisa_account=None,
         )
 
-        manager.deposit(amount=decimal.Decimal(4_000_000), age=30)
+        manager.deposit(amount=decimal.Decimal(8_000_000), age=30)
 
         assert manager.old_nisa_account is None
         assert manager.ideco_investment_account is not None
-        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(276_000)
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert manager.nisa_account is not None
         assert manager.nisa_account.portfolio_value == decimal.Decimal(3_600_000)
         assert manager.ordinary_investment_account is not None
-        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(124_000)
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(3_656_000)
+
+    def test_manager_deposits_to_ideco_through_age_69(self, investment_manager):
+
+        investment_manager.deposit(amount=decimal.Decimal(1), age=69)
+        investment_manager.deposit(amount=decimal.Decimal(1), age=70)
+
+        assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal(1)
+        assert investment_manager.nisa_account is not None
+        assert investment_manager.nisa_account.portfolio_value == decimal.Decimal(1)
 
     def test_deposit_without_nisa_account_uses_ideco_then_ordinary_account(self, investment_manager):
 
@@ -1696,8 +1821,8 @@ class TestSimpleInvestmentManager:
 
         assert ideco_account is not None
         assert ordinary_account is not None
-        assert ideco_account.portfolio_value == decimal.Decimal(276_000)
-        assert ordinary_account.portfolio_value == decimal.Decimal(724_000)
+        assert ideco_account.portfolio_value == decimal.Decimal(744_000)
+        assert ordinary_account.portfolio_value == decimal.Decimal(256_000)
 
     def test_deposit_without_ordinary_account_uses_tax_advantaged_capacity(self, investment_manager):
 
@@ -1713,8 +1838,8 @@ class TestSimpleInvestmentManager:
 
         manager.deposit(amount=decimal.Decimal(3_000_000), age=30)
 
-        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(276_000)
-        assert manager.nisa_account.portfolio_value == decimal.Decimal(2_724_000)
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(2_256_000)
 
     def test_deposit_without_ideco_account_uses_nisa_then_ordinary_account(self, investment_manager):
 
@@ -2033,13 +2158,13 @@ class TestSimpleInvestmentManager:
     def test_deposit_priority(self, investment_manager):
 
         # Deposit 5,000,000 Yen at age 30
-        # Expected order: iDeCo (max 276,000) -> NISA (max 3,600,000) -> Ordinary (rest: 1,124,000)
+        # Expected order: iDeCo (max 744,000) -> NISA (max 3,600,000) -> Ordinary (rest: 656,000)
         investment_manager.deposit(amount=decimal.Decimal(5_000_000), age=30)
 
-        assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal(276_000)
+        assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert investment_manager.nisa_account is not None
         assert investment_manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
-        assert investment_manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(1_124_000)
+        assert investment_manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(656_000)
 
     def test_withdraw_priority(self, investment_manager):
 
