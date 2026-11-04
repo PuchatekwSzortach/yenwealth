@@ -5,7 +5,7 @@ set -x
 pycodestyle ./src ./tests
 pytest
 ruff check .
-python -m pyright --pythonpath "$CONDA_PREFIX/bin/python"
+pyright
 codespell . --skip site
 
 python scripts/sync_front_page_example.py --check
