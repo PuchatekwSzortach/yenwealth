@@ -1,5 +1,10 @@
 # Changelog
 
+### 0.7.0
+- improved - IdecoInvestmentAccount is now modelled on rules and limits from December 2026
+- improved - most objects now accept DecimalInput (int, float or decimal.Decimal) instead of only decimal.Decimal for financial values
+- improved - added proper documentation
+
 ### 0.6.2
 - improved - SimpleInvestmentManager now calls start_pension_scheme at the appropriate age for a configured iDeCo account
 - improved - added documentation
