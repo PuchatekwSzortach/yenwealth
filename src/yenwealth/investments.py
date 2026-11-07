@@ -1267,24 +1267,19 @@ class SimpleInvestmentManager:
                 self.current_year
             )
 
-            if tax_free_lump_sum > 0:
+            self.ideco_investment_account.start_pension_scheme(age=self._current_age)
 
-                if self.ordinary_investment_account is None:
-                    raise ValueError(
-                        "Cannot deposit the iDeCo tax-free lump sum because ordinary investment account is not "
-                        "configured"
-                    )
-                self.ordinary_investment_account.deposit(tax_free_lump_sum)
+            LOGGER.debug(f"Started iDeCo pension mode at age {self._current_age}")
+
+            if tax_free_lump_sum > 0:
 
                 LOGGER.debug(
                     f"Withdrew tax-free lump sum of {utilities.format_million_yen(tax_free_lump_sum)} "
                     "from iDeCo account")
 
-            self.ideco_investment_account.start_pension_scheme(age=self._current_age)
-
-            LOGGER.debug(
-                f"Started iDeCo pension mode at age {self._current_age}"
-            )
+                # Deposit method already optimizes moving funds in the best order,
+                # so we can just call it with the lump sum
+                self.deposit(tax_free_lump_sum, age=self._current_age)
 
         if (
             self.ordinary_investment_account is not None
@@ -1294,7 +1289,8 @@ class SimpleInvestmentManager:
 
             amount_to_move_from_ordinary_account_to_nisa = min(
                 self.nisa_account.total_deposit_limit - self.nisa_account.principal,
-                self.nisa_account.annual_deposit_limit,
+                self.nisa_account.annual_deposit_limit
+                - self.nisa_account.year_to_deposit_map[self.current_year],
                 self.ordinary_investment_account.max_cash_withdrawal
             )
 
