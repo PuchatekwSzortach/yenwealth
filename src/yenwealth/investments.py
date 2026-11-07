@@ -1240,21 +1240,19 @@ class SimpleInvestmentManager:
 
             expired_year = self.current_year - 20
             asset_map = self.old_nisa_account.year_to_asset_map[expired_year]
-            portfolio_value = decimal.Decimal(sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
+
+            old_nisa_portfolio_value = decimal.Decimal(
+                sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
 
             self.old_nisa_account.year_to_asset_map.pop(expired_year)
 
-            if portfolio_value > 0:
+            if old_nisa_portfolio_value > 0:
 
-                if self.ordinary_investment_account is None:
-                    raise ValueError(
-                        "Cannot deposit expired old NISA assets because ordinary investment account is not configured"
-                    )
-                self.ordinary_investment_account.deposit(portfolio_value)
+                self.deposit(old_nisa_portfolio_value, age=self._current_age)
 
                 LOGGER.debug(
-                    f"Moved {utilities.format_million_yen(portfolio_value)} from old NISA account "
-                    f"for year {self.current_year - 20} to ordinary investment account"
+                    f"Moved {utilities.format_million_yen(old_nisa_portfolio_value)} from old NISA account "
+                    f"for year {self.current_year - 20} to other investment accounts"
                 )
 
         # Check if we should do lump withdrawal from iDeCo
