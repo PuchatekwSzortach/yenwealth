@@ -521,11 +521,7 @@ class IdecoInvestmentAccount:
         Return the remaining contribution capacity for ``year`` at ``age``.
         """
 
-        if (
-            age >= self.max_deposit_age
-            or age >= self.ideco_pension_payout_plan.start_age
-            or self.has_started_drawing_pension
-        ):
+        if age >= self.max_deposit_age or self.has_started_drawing_pension:
             return decimal.Decimal(0)
 
         return self.max_annual_contribution - self.deposit_amount_by_year.get(year, decimal.Decimal(0))
