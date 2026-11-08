@@ -817,19 +817,36 @@ class TestIdecoInvestmentAccount:
     def test_deposit_accepts_annual_limit_and_rejects_amount_above_it(self):
 
         account = self.create_account()
-        account.deposit(account.max_annual_contribution, age=40)
+        account.deposit(account.max_annual_contribution, age=40, year=2024)
 
         over_limit_account = self.create_account()
         with pytest.raises(ValueError, match="exceeds maximum allowed contribution"):
-            over_limit_account.deposit(over_limit_account.max_annual_contribution + 1, age=40)
+            over_limit_account.deposit(over_limit_account.max_annual_contribution + 1, age=40, year=2024)
+
+    def test_deposit_tracks_annual_contributions_across_multiple_deposits(self):
+
+        account = self.create_account()
+        account.deposit(400_000, age=40, year=2024)
+        account.deposit(344_000, age=40, year=2024)
+
+        with pytest.raises(ValueError, match="exceeds maximum allowed contribution"):
+            account.deposit(1, age=40, year=2024)
+
+        account.deposit(1, age=40, year=2025)
 
     def test_deposit_is_allowed_through_age_69_but_not_at_age_70(self):
 
         account = self.create_account()
-        account.deposit(decimal.Decimal(1), age=69)
+        account.deposit(decimal.Decimal(1), age=69, year=2024)
 
         with pytest.raises(ValueError, match="maximum allowed deposit age of 70"):
-            account.deposit(decimal.Decimal(1), age=70)
+            account.deposit(decimal.Decimal(1), age=70, year=2024)
+
+    def test_remaining_contribution_capacity_is_zero_at_pension_start_age(self):
+
+        account = self.create_account()
+
+        assert account.get_remaining_contribution_capacity_for_target_year(year=2069, age=75) == decimal.Decimal(0)
 
     def test_corporate_pension_category_requires_annual_contribution_to_other_pensions(self):
 
@@ -886,7 +903,7 @@ class TestIdecoInvestmentAccount:
             ideco_pension_payout_plan=self.create_payout_plan(start_age=65, period_in_years=10),
         )
 
-        account.deposit(20.5, age=40)
+        account.deposit(20.5, age=40, year=2024)
         account.advance_one_year({"VOO": 0.1})
 
         assert type(asset.principal) is decimal.Decimal
@@ -908,7 +925,8 @@ class TestIdecoInvestmentAccount:
 
         ideco.deposit(
             amount=decimal.Decimal(10),
-            age=40
+            age=40,
+            year=2024,
         )
 
         assert ideco.asset_map["VGT"].principal == decimal.Decimal("12.5")
@@ -917,7 +935,7 @@ class TestIdecoInvestmentAccount:
         ideco.start_pension_scheme(age=75)
 
         with pytest.raises(ValueError, match="Cannot deposit after pension drawing has started"):
-            ideco.deposit(amount=decimal.Decimal(10), age=40)
+            ideco.deposit(amount=decimal.Decimal(10), age=40, year=2024)
 
     def test_advance_one_year(self):
 
@@ -1779,6 +1797,39 @@ class TestSimpleInvestmentManager:
         description = manager.get_formatted_portfolio_summary_description()
         assert "\nnisa_account:" not in description
 
+    def test_remaining_tax_advantaged_contribution_capacity_by_account_name_tracks_deposits_and_year(
+            self, investment_manager):
+
+        initial_room = investment_manager.get_remaining_tax_advantaged_contribution_capacity_by_account_name(2024)
+
+        assert initial_room == {
+            "ideco_investment_account": decimal.Decimal(744_000),
+            "nisa_account": decimal.Decimal(3_600_000),
+        }
+
+        investment_manager.deposit(amount=decimal.Decimal(1_000_000), age=30)
+        current_year_room = investment_manager.get_remaining_tax_advantaged_contribution_capacity_by_account_name(2024)
+
+        assert current_year_room == {
+            "ideco_investment_account": decimal.Decimal(0),
+            "nisa_account": decimal.Decimal(3_344_000),
+        }
+
+        next_year_room = investment_manager.get_remaining_tax_advantaged_contribution_capacity_by_account_name(2025)
+
+        assert next_year_room == {
+            "ideco_investment_account": decimal.Decimal(744_000),
+            "nisa_account": decimal.Decimal(3_600_000),
+        }
+
+    def test_remaining_tax_advantaged_contribution_capacity_by_account_name_rejects_past_year(
+            self, investment_manager):
+
+        investment_manager.advance_one_year({"VOO": decimal.Decimal(0)})
+
+        with pytest.raises(ValueError, match="Cannot query contribution room for past year"):
+            investment_manager.get_remaining_tax_advantaged_contribution_capacity_by_account_name(2024)
+
     def test_deposit_without_old_nisa_account(self, investment_manager):
 
         manager = self.create_investment_manager(
@@ -2112,33 +2163,6 @@ class TestSimpleInvestmentManager:
         assert manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
         assert manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(6_400_000)
 
-    def test_optimize_expired_old_nisa_requires_ordinary_account(self, investment_manager):
-
-        manager = self.create_investment_manager(
-            investment_manager,
-            ordinary_investment_account=None,
-        )
-
-        old_nisa_account = manager.old_nisa_account
-        assert old_nisa_account is not None
-
-        old_nisa_account.year_to_asset_map = {
-            2024: {
-                "VOO": yenwealth.investments.Asset(
-                    name="VOO",
-                    principal=decimal.Decimal(1_000_000),
-                    gain=decimal.Decimal(0),
-                    annual_management_cost_rate=decimal.Decimal(0),
-                )
-            }
-        }
-        manager.current_year = 2044
-
-        with pytest.raises(ValueError, match="ordinary investment account is not configured"):
-            manager.optimize_investments()
-
-        assert 2024 not in old_nisa_account.year_to_asset_map
-
     def test_optimize_ideco_lump_sum_requires_ordinary_account(self, investment_manager):
 
         manager = self.create_investment_manager(
@@ -2205,7 +2229,7 @@ class TestSimpleInvestmentManager:
             2024: {
                 "VOO": yenwealth.investments.Asset(
                     name="VOO",
-                    principal=decimal.Decimal(1_000_000),
+                    principal=decimal.Decimal(5_000_000),
                     gain=decimal.Decimal(0),
                     annual_management_cost_rate=decimal.Decimal(0)
                 )
@@ -2217,8 +2241,13 @@ class TestSimpleInvestmentManager:
 
         # 2024 Old NISA portfolio should be removed and moved into NISA Account
         assert 2024 not in old_nisa_account.year_to_asset_map
+
+        assert investment_manager.ideco_investment_account is not None
+        assert investment_manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert investment_manager.nisa_account is not None
-        assert investment_manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(1_000_000)
+        assert investment_manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
+        assert investment_manager.ordinary_investment_account is not None
+        assert investment_manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(656_000)
 
     def test_optimize_investments_ideco_lump_sum_and_nisa_topup(self, investment_manager):
 

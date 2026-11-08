@@ -462,6 +462,10 @@ class IdecoInvestmentAccount:
 
         self.max_deposit_age = 70
 
+        self.deposit_amount_by_year: collections.defaultdict[int, decimal.Decimal] = collections.defaultdict(
+            decimal.Decimal
+        )
+
         self.has_started_drawing_pension = False
         self.pension_payout_ages: list[int] = []
 
@@ -512,9 +516,19 @@ class IdecoInvestmentAccount:
             sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
         ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
-    def deposit(self, amount: numeric.DecimalInput, age: int):
+    def get_remaining_contribution_capacity_for_target_year(self, year: int, age: int) -> decimal.Decimal:
         """
-        Deposit a positive contribution before pension payout begins.
+        Return the remaining contribution capacity for ``year`` at ``age``.
+        """
+
+        if age >= self.max_deposit_age or self.has_started_drawing_pension:
+            return decimal.Decimal(0)
+
+        return self.max_annual_contribution - self.deposit_amount_by_year.get(year, decimal.Decimal(0))
+
+    def deposit(self, amount: numeric.DecimalInput, age: int, year: int):
+        """
+        Deposit a positive contribution within the annual limit.
         """
 
         amount = numeric.to_decimal(amount)
@@ -528,9 +542,12 @@ class IdecoInvestmentAccount:
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
 
-        if amount > self.max_annual_contribution:
+        if self.deposit_amount_by_year[year] + amount > self.max_annual_contribution:
             raise ValueError(
-                f"Deposit amount {amount} exceeds maximum allowed contribution of {self.max_annual_contribution}")
+                f"Deposit amount {amount} exceeds maximum allowed contribution of "
+                f"{self.max_annual_contribution} for year {year}. "
+                f"Current deposit for year {year} is {self.deposit_amount_by_year[year]}"
+            )
 
         allocations = self.asset_purchase_strategy.allocate(
             amount=amount,
@@ -539,6 +556,8 @@ class IdecoInvestmentAccount:
 
         for name, allocation in allocations.items():
             self.asset_map[name].buy(allocation)
+
+        self.deposit_amount_by_year[year] += amount
 
     def advance_one_year(self, investment_returns: collections.abc.Mapping[str, numeric.DecimalInput]):
         """
@@ -796,6 +815,16 @@ class NisaAccount:
             sum((asset.value for asset in self.asset_map.values()), decimal.Decimal(0))
         ).quantize(constants.YEN, decimal.ROUND_DOWN)
 
+    def get_remaining_contribution_capacity_for_target_year(self, year: int) -> decimal.Decimal:
+        """
+        Return the remaining contribution capacity for ``year``.
+        """
+
+        annual_capacity = self.annual_deposit_limit - self.year_to_deposit_map.get(year, decimal.Decimal(0))
+        lifetime_capacity = self.total_deposit_limit - self.principal
+
+        return min(annual_capacity, lifetime_capacity)
+
     def deposit(self, amount: numeric.DecimalInput, year: int):
         """
         Deposit a positive amount in ``year`` within the configured limits.
@@ -1038,9 +1067,15 @@ class SimpleInvestmentManager:
         ):
 
             def deposit_to_ideco(requested_amount: decimal.Decimal) -> decimal.Decimal:
-                amount = min(requested_amount, ideco_account.max_annual_contribution)
+
+                remaining_capacity = \
+                    ideco_account.max_annual_contribution - ideco_account.deposit_amount_by_year[self.current_year]
+
+                amount = min(requested_amount, remaining_capacity)
+
                 if amount > 0:
-                    ideco_account.deposit(amount, age=age)
+                    ideco_account.deposit(amount, age=age, year=self.current_year)
+
                 return amount
 
             actions.append(
@@ -1156,6 +1191,37 @@ class SimpleInvestmentManager:
             decimal.Decimal(0),
         )
 
+    def get_remaining_tax_advantaged_contribution_capacity_by_account_name(
+            self, year: int) -> dict[str, decimal.Decimal]:
+        """
+        Return remaining contribution room for configured iDeCo and NISA accounts.
+
+        The requested year must be the manager's current year or a future year.
+        iDeCo eligibility uses the age implied by the simulation start age and year.
+        """
+
+        if year < self.current_year:
+            raise ValueError(
+                f"Cannot query contribution room for past year {year}; current year is {self.current_year}"
+            )
+
+        remaining_capacity_by_account_name: dict[str, decimal.Decimal] = {}
+
+        if self.ideco_investment_account is not None:
+
+            remaining_capacity_by_account_name["ideco_investment_account"] = (
+                self.ideco_investment_account.get_remaining_contribution_capacity_for_target_year(
+                    year=year,
+                    age=self.simulation_start_age + year - self.simulation_start_year)
+            )
+
+        if self.nisa_account is not None:
+            remaining_capacity_by_account_name["nisa_account"] = (
+                self.nisa_account.get_remaining_contribution_capacity_for_target_year(year=year)
+            )
+
+        return remaining_capacity_by_account_name
+
     def advance_one_year(self, investment_returns: collections.abc.Mapping[str, numeric.DecimalInput]):
         """
         Apply one year's returns and advance the manager's calendar year.
@@ -1240,21 +1306,21 @@ class SimpleInvestmentManager:
 
             expired_year = self.current_year - 20
             asset_map = self.old_nisa_account.year_to_asset_map[expired_year]
-            portfolio_value = decimal.Decimal(sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
+
+            old_nisa_portfolio_value = decimal.Decimal(
+                sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
 
             self.old_nisa_account.year_to_asset_map.pop(expired_year)
 
-            if portfolio_value > 0:
+            if old_nisa_portfolio_value > 0:
 
-                if self.ordinary_investment_account is None:
-                    raise ValueError(
-                        "Cannot deposit expired old NISA assets because ordinary investment account is not configured"
-                    )
-                self.ordinary_investment_account.deposit(portfolio_value)
+                # Deposit method already optimizes moving funds in the best order,
+                # so we can just call it with the lump sum
+                self.deposit(old_nisa_portfolio_value, age=self._current_age)
 
                 LOGGER.debug(
-                    f"Moved {utilities.format_million_yen(portfolio_value)} from old NISA account "
-                    f"for year {self.current_year - 20} to ordinary investment account"
+                    f"Moved {utilities.format_million_yen(old_nisa_portfolio_value)} from old NISA account "
+                    f"for year {self.current_year - 20} to other investment accounts"
                 )
 
         # Check if we should do lump withdrawal from iDeCo
@@ -1263,28 +1329,19 @@ class SimpleInvestmentManager:
             and self._current_age == self.ideco_investment_account.ideco_pension_payout_plan.start_age
         ):
 
-            tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(
-                self.current_year
-            )
+            tax_free_lump_sum = self.ideco_investment_account.withdraw_tax_free_lump_sum(self.current_year)
+            self.ideco_investment_account.start_pension_scheme(age=self._current_age)
+            LOGGER.debug(f"Started iDeCo pension mode at age {self._current_age}")
 
             if tax_free_lump_sum > 0:
-
-                if self.ordinary_investment_account is None:
-                    raise ValueError(
-                        "Cannot deposit the iDeCo tax-free lump sum because ordinary investment account is not "
-                        "configured"
-                    )
-                self.ordinary_investment_account.deposit(tax_free_lump_sum)
 
                 LOGGER.debug(
                     f"Withdrew tax-free lump sum of {utilities.format_million_yen(tax_free_lump_sum)} "
                     "from iDeCo account")
 
-            self.ideco_investment_account.start_pension_scheme(age=self._current_age)
-
-            LOGGER.debug(
-                f"Started iDeCo pension mode at age {self._current_age}"
-            )
+                # Deposit method already optimizes moving funds in the best order,
+                # so we can just call it with the lump sum
+                self.deposit(tax_free_lump_sum, age=self._current_age)
 
         if (
             self.ordinary_investment_account is not None
@@ -1294,7 +1351,7 @@ class SimpleInvestmentManager:
 
             amount_to_move_from_ordinary_account_to_nisa = min(
                 self.nisa_account.total_deposit_limit - self.nisa_account.principal,
-                self.nisa_account.annual_deposit_limit,
+                self.nisa_account.annual_deposit_limit - self.nisa_account.year_to_deposit_map[self.current_year],
                 self.ordinary_investment_account.max_cash_withdrawal
             )
 
