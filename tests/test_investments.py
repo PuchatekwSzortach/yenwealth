@@ -2124,11 +2124,13 @@ class TestSimpleInvestmentManager:
         manager.apply_investment_policy()
 
         assert manager.old_nisa_account is None
+        assert manager.ideco_investment_account is not None
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert manager.nisa_account is not None
         assert manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
-        assert manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(6_400_000)
+        assert manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(5_656_000)
 
-    def test_apply_investment_policy_without_nisa_account_skips_nisa_topup(self, investment_manager):
+    def test_apply_investment_policy_without_nisa_account_still_contributes_to_ideco(self, investment_manager):
 
         manager = self.create_investment_manager(
             investment_manager,
@@ -2142,7 +2144,89 @@ class TestSimpleInvestmentManager:
         manager.apply_investment_policy()
 
         assert manager.nisa_account is None
-        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(10_000_000)
+        assert manager.ideco_investment_account is not None
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(9_256_000)
+
+    def test_apply_investment_policy_uses_nisa_to_fill_remaining_ideco_capacity(self, investment_manager):
+
+        manager = investment_manager
+        assert manager.ordinary_investment_account is not None
+        assert manager.ideco_investment_account is not None
+        assert manager.nisa_account is not None
+
+        manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(500_000)
+        manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
+
+        manager.apply_investment_policy()
+
+        # Ordinary funds contribute first; NISA holdings cover the remaining iDeCo room.
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(0)
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(756_000)
+
+    def test_apply_investment_policy_moves_remaining_ordinary_funds_to_nisa(self, investment_manager):
+
+        manager = investment_manager
+        assert manager.ordinary_investment_account is not None
+        assert manager.ideco_investment_account is not None
+        assert manager.nisa_account is not None
+
+        manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
+
+        manager.apply_investment_policy()
+
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(1_256_000)
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(0)
+
+    def test_apply_investment_policy_respects_existing_ideco_contributions(self, investment_manager):
+
+        manager = investment_manager
+        assert manager.ordinary_investment_account is not None
+        assert manager.ideco_investment_account is not None
+        assert manager.nisa_account is not None
+
+        manager.ideco_investment_account.deposit(decimal.Decimal(500_000), age=30, year=2024)
+        manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
+
+        manager.apply_investment_policy()
+
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(756_000)
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(0)
+
+    def test_apply_investment_policy_respects_remaining_nisa_annual_capacity(self, investment_manager):
+
+        manager = investment_manager
+        assert manager.ordinary_investment_account is not None
+        assert manager.ideco_investment_account is not None
+        assert manager.nisa_account is not None
+
+        manager.nisa_account.deposit(decimal.Decimal(3_000_000), year=2024)
+        manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
+
+        manager.apply_investment_policy()
+
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(3_600_000)
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(656_000)
+
+    def test_apply_investment_policy_respects_remaining_nisa_lifetime_capacity(self, investment_manager):
+
+        manager = investment_manager
+        assert manager.ordinary_investment_account is not None
+        assert manager.ideco_investment_account is not None
+        assert manager.nisa_account is not None
+
+        manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(17_900_000)
+        manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
+
+        manager.apply_investment_policy()
+
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(18_000_000)
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(1_156_000)
 
     def test_apply_investment_policy_without_ideco_account_still_topups_nisa(self, investment_manager):
 
@@ -2315,3 +2399,26 @@ class TestSimpleInvestmentManager:
         assert type(asset.principal) is decimal.Decimal
         assert type(asset.gain) is decimal.Decimal
         assert type(manager.portfolio_value) is decimal.Decimal
+
+
+@pytest.mark.parametrize(
+    ("source_amount", "destination_capacity", "expected_message"),
+    [
+        (decimal.Decimal(-1), decimal.Decimal(10), "negative available amount"),
+        (decimal.Decimal(10), decimal.Decimal(-1), "negative remaining capacity"),
+    ],
+)
+def test_transfer_action_rejects_negative_amounts(
+    source_amount, destination_capacity, expected_message
+):
+    action = yenwealth.investments._TransferAction(
+        source_available_amount=lambda: source_amount,
+        destination_remaining_capacity=lambda: destination_capacity,
+        withdraw=lambda amount: None,
+        deposit=lambda amount: None,
+        source_account_name="ordinary investment",
+        destination_account_name="NISA",
+    )
+
+    with pytest.raises(ValueError, match=expected_message):
+        action.execute()

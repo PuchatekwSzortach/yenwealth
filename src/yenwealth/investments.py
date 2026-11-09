@@ -977,6 +977,45 @@ class _DepositAction:
 
 
 @dataclasses.dataclass(frozen=True)
+class _TransferAction:
+    """Describe a prioritized transfer between two investment accounts."""
+
+    source_available_amount: typing.Callable[[], decimal.Decimal]
+    destination_remaining_capacity: typing.Callable[[], decimal.Decimal]
+    withdraw: typing.Callable[[decimal.Decimal], None]
+    deposit: typing.Callable[[decimal.Decimal], None]
+    source_account_name: str
+    destination_account_name: str
+
+    def execute(self) -> decimal.Decimal:
+        """Transfer as much as both accounts currently allow."""
+
+        source_available = self.source_available_amount()
+
+        if source_available < 0:
+            raise ValueError(
+                f"Source account {self.source_account_name} reported negative available amount "
+                f"{source_available}"
+            )
+
+        destination_capacity = self.destination_remaining_capacity()
+
+        if destination_capacity < 0:
+            raise ValueError(
+                f"Destination account {self.destination_account_name} reported negative remaining "
+                f"capacity {destination_capacity}"
+            )
+
+        amount = min(source_available, destination_capacity)
+
+        if amount > 0:
+            self.withdraw(amount)
+            self.deposit(amount)
+
+        return amount
+
+
+@dataclasses.dataclass(frozen=True)
 class _WithdrawalSource:
     """
     Describe an account's available cash and withdrawal priority.
@@ -997,7 +1036,7 @@ class SimpleInvestmentManager:
     - prioritizes depositing into iDeCo, NISA, and then ordinary account
     - prioritizes withdrawing from ordinary account, old NISA, and then NISA
     - transfers due old NISA holdings and the modeled iDeCo lump sum
-    - moves ordinary account funds into NISA when contribution room remains
+    - moves funds from other accounts into iDeCo, then NISA, when capacity exists
     """
 
     def __init__(
@@ -1351,35 +1390,90 @@ class SimpleInvestmentManager:
 
     def apply_investment_policy(self):
         """
-        Allocate available ordinary-account funds to NISA under the policy.
+        Move available funds into tax-advantaged accounts under the policy.
         """
 
-        if (
-            self.ordinary_investment_account is not None
-            and self.nisa_account is not None
-            and self.nisa_account.principal < self.nisa_account.total_deposit_limit
-        ):
+        transfer_actions = self._build_investment_policy_actions()
 
-            amount_to_move_from_ordinary_account_to_nisa = min(
-                self.nisa_account.total_deposit_limit - self.nisa_account.principal,
-                self.nisa_account.annual_deposit_limit - self.nisa_account.year_to_deposit_map[self.current_year],
-                self.ordinary_investment_account.max_cash_withdrawal
+        for action in transfer_actions:
+
+            amount = action.execute()
+
+            if amount > 0:
+                LOGGER.debug(
+                    f"Moved {utilities.format_million_yen(amount)} from {action.source_account_name} "
+                    f"account to {action.destination_account_name} account"
+                )
+
+    def _build_investment_policy_actions(self) -> list[_TransferAction]:
+        """Build policy transfers in priority order, omitting unconfigured routes."""
+
+        actions: list[_TransferAction] = []
+        ordinary_account = self.ordinary_investment_account
+        ideco_account = self.ideco_investment_account
+        nisa_account = self.nisa_account
+
+        def deposit_to_ideco(amount: decimal.Decimal) -> None:
+            assert ideco_account is not None
+            ideco_account.deposit(amount, age=self._current_age, year=self.current_year)
+
+        # First move funds from ordinary and NISA accounts into iDeCo if capacity exists
+        if ordinary_account is not None and ideco_account is not None:
+
+            actions.append(
+                _TransferAction(
+                    source_available_amount=lambda: ordinary_account.max_cash_withdrawal,
+                    destination_remaining_capacity=lambda: (
+                        ideco_account.get_remaining_contribution_capacity_for_target_year(
+                            year=self.current_year,
+                            age=self._current_age,
+                        )
+                    ),
+                    withdraw=ordinary_account.withdraw,
+                    deposit=deposit_to_ideco,
+                    source_account_name="ordinary investment",
+                    destination_account_name="iDeCo",
+                )
             )
 
-            if amount_to_move_from_ordinary_account_to_nisa > 0:
+        # Next move funds from NISA into iDeCo if capacity exists
+        if nisa_account is not None and ideco_account is not None:
 
-                self.ordinary_investment_account.withdraw(
-                    amount_to_move_from_ordinary_account_to_nisa)
-
-                self.nisa_account.deposit(
-                    amount_to_move_from_ordinary_account_to_nisa,
-                    self.current_year
+            actions.append(
+                _TransferAction(
+                    source_available_amount=lambda: nisa_account.portfolio_value,
+                    destination_remaining_capacity=lambda: (
+                        ideco_account.get_remaining_contribution_capacity_for_target_year(
+                            year=self.current_year,
+                            age=self._current_age,
+                        )
+                    ),
+                    withdraw=nisa_account.withdraw,
+                    deposit=deposit_to_ideco,
+                    source_account_name="NISA",
+                    destination_account_name="iDeCo",
                 )
+            )
 
-                LOGGER.debug(
-                    f"Moved {utilities.format_million_yen(amount_to_move_from_ordinary_account_to_nisa)} "
-                    "from ordinary investment account to NISA account"
+        # Finally move funds from ordinary account into NISA if capacity exists
+        if ordinary_account is not None and nisa_account is not None:
+
+            actions.append(
+                _TransferAction(
+                    source_available_amount=lambda: ordinary_account.max_cash_withdrawal,
+                    destination_remaining_capacity=lambda: (
+                        nisa_account.get_remaining_contribution_capacity_for_target_year(
+                            year=self.current_year
+                        )
+                    ),
+                    withdraw=ordinary_account.withdraw,
+                    deposit=lambda amount: nisa_account.deposit(amount, year=self.current_year),
+                    source_account_name="ordinary investment",
+                    destination_account_name="NISA",
                 )
+            )
+
+        return actions
 
     def get_portfolio_summary(self) -> dict[str, decimal.Decimal]:
         """
