@@ -930,9 +930,15 @@ class InvestmentManager(typing.Protocol):
         """
         ...
 
-    def optimize_investments(self):
+    def process_due_account_events(self):
         """
-        Apply transfers and account actions due under the investment policy.
+        Apply account actions due at the current age or year before cash flow.
+        """
+        ...
+
+    def apply_investment_policy(self):
+        """
+        Apply the investment policy after the current year's cash flow.
         """
         ...
 
@@ -1296,9 +1302,9 @@ class SimpleInvestmentManager:
 
             raise InsufficientFunds(f"Not enough funds to withdraw {desired_cash}")
 
-    def optimize_investments(self):
+    def process_due_account_events(self):
         """
-        Apply account transfers due under the configured investment policy.
+        Apply account actions due at the current age or year before cash flow.
         """
 
         # Check if any old nisa account portfolio has to be liquidated
@@ -1342,6 +1348,11 @@ class SimpleInvestmentManager:
                 # Deposit method already optimizes moving funds in the best order,
                 # so we can just call it with the lump sum
                 self.deposit(tax_free_lump_sum, age=self._current_age)
+
+    def apply_investment_policy(self):
+        """
+        Allocate available ordinary-account funds to NISA under the policy.
+        """
 
         if (
             self.ordinary_investment_account is not None
