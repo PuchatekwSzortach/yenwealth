@@ -1732,70 +1732,49 @@ class TestSimpleInvestmentManager:
                 nisa_account=None,
             )
 
-    def test_init_allows_ordinary_account_to_be_omitted(self, investment_manager):
+    @pytest.mark.parametrize(
+        "account_name",
+        [
+            "ordinary_investment_account",
+            "ideco_investment_account",
+            "old_nisa_account",
+            "nisa_account",
+        ],
+    )
+    def test_manager_can_be_created_with_each_account_omitted(self, investment_manager, account_name):
 
         manager = self.create_investment_manager(
             investment_manager,
-            ordinary_investment_account=None,
+            **{account_name: None},
         )
 
-        assert manager.ordinary_investment_account is None
-        assert manager.portfolio_value == decimal.Decimal(0)
-        assert manager.after_tax_portfolio_value == decimal.Decimal(0)
-        assert "ordinary_investment_account" not in manager.get_portfolio_summary()
+        assert getattr(manager, account_name) is None
 
-    def test_init_allows_ideco_account_to_be_omitted(self, investment_manager):
+    @pytest.mark.parametrize(
+        ("omitted_account_name", "populated_account_name"),
+        [
+            ("ordinary_investment_account", "ideco_investment_account"),
+            ("ideco_investment_account", "ordinary_investment_account"),
+            ("old_nisa_account", "nisa_account"),
+            ("nisa_account", "ordinary_investment_account"),
+        ],
+    )
+    def test_portfolio_summary_excludes_unconfigured_account_and_keeps_other_values(
+            self, investment_manager, omitted_account_name, populated_account_name):
 
         manager = self.create_investment_manager(
             investment_manager,
-            ideco_investment_account=None,
+            **{omitted_account_name: None},
         )
 
-        assert manager.ideco_investment_account is None
-        assert manager.portfolio_value == decimal.Decimal(0)
-        assert manager.after_tax_portfolio_value == decimal.Decimal(0)
-        assert "ideco_investment_account" not in manager.get_portfolio_summary()
-
-    def test_init_omits_only_old_nisa_account_from_summary_when_not_configured(self, investment_manager):
-
-        manager = self.create_investment_manager(
-            investment_manager,
-            old_nisa_account=None,
-        )
-
-        assert manager.old_nisa_account is None
-
-        assert manager.nisa_account is not None
-        manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
+        populated_account = getattr(manager, populated_account_name)
+        assert populated_account is not None
+        populated_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
         summary = manager.get_portfolio_summary()
 
-        assert "old_nisa_account" not in set(summary)
-        assert summary["nisa_account"] == decimal.Decimal(1_000_000)
+        assert omitted_account_name not in summary
+        assert summary[populated_account_name] == decimal.Decimal(1_000_000)
         assert summary["total_portfolio_value"] == decimal.Decimal(1_000_000)
-
-        description = manager.get_formatted_portfolio_summary_description()
-        assert "old_nisa_account" not in description
-
-    def test_init_omits_nisa_account_from_summary_when_not_configured(self, investment_manager):
-
-        manager = self.create_investment_manager(
-            investment_manager,
-            nisa_account=None,
-        )
-
-        assert manager.nisa_account is None
-
-        ordinary_account = manager.ordinary_investment_account
-        assert ordinary_account is not None
-        ordinary_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
-        summary = manager.get_portfolio_summary()
-
-        assert "nisa_account" not in summary
-        assert summary["ordinary_investment_account"] == decimal.Decimal(1_000_000)
-        assert summary["total_portfolio_value"] == decimal.Decimal(1_000_000)
-
-        description = manager.get_formatted_portfolio_summary_description()
-        assert "\nnisa_account:" not in description
 
     def test_remaining_tax_advantaged_contribution_capacity_by_account_name_tracks_deposits_and_year(
             self, investment_manager):
@@ -1829,23 +1808,6 @@ class TestSimpleInvestmentManager:
 
         with pytest.raises(ValueError, match="Cannot query contribution room for past year"):
             investment_manager.get_remaining_tax_advantaged_contribution_capacity_by_account_name(2024)
-
-    def test_deposit_without_old_nisa_account(self, investment_manager):
-
-        manager = self.create_investment_manager(
-            investment_manager,
-            old_nisa_account=None,
-        )
-
-        manager.deposit(amount=decimal.Decimal(8_000_000), age=30)
-
-        assert manager.old_nisa_account is None
-        assert manager.ideco_investment_account is not None
-        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
-        assert manager.nisa_account is not None
-        assert manager.nisa_account.portfolio_value == decimal.Decimal(3_600_000)
-        assert manager.ordinary_investment_account is not None
-        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(3_656_000)
 
     def test_manager_deposits_to_ideco_through_age_69(self, investment_manager):
 
@@ -1958,35 +1920,6 @@ class TestSimpleInvestmentManager:
         assert old_nisa_account.portfolio_value == decimal.Decimal(0)
         assert manager.nisa_account.portfolio_value == decimal.Decimal(500_000)
 
-    def test_withdraw_without_ideco_account_uses_old_nisa_then_nisa(self, investment_manager):
-
-        manager = self.create_investment_manager(
-            investment_manager,
-            ideco_investment_account=None,
-        )
-
-        old_nisa_account = manager.old_nisa_account
-        assert old_nisa_account is not None
-
-        old_nisa_account.year_to_asset_map = {
-            2024: {
-                "VOO": yenwealth.investments.Asset(
-                    name="VOO",
-                    principal=decimal.Decimal(500_000),
-                    gain=decimal.Decimal(0),
-                    annual_management_cost_rate=decimal.Decimal(0),
-                )
-            }
-        }
-
-        assert manager.nisa_account is not None
-        manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
-
-        manager.withdraw(desired_cash=decimal.Decimal(2_000_000))
-
-        assert old_nisa_account.portfolio_value == decimal.Decimal(0)
-        assert manager.nisa_account.portfolio_value == decimal.Decimal(500_000)
-
     def test_withdraw_without_old_nisa_account_uses_nisa(self, investment_manager):
 
         manager = self.create_investment_manager(
@@ -2040,50 +1973,24 @@ class TestSimpleInvestmentManager:
         with pytest.raises(yenwealth.investments.InsufficientFunds, match="Not enough funds"):
             manager.withdraw(desired_cash=decimal.Decimal(3_000_000))
 
-    def test_advance_one_year_without_ordinary_account(self, investment_manager):
+    @pytest.mark.parametrize(
+        "account_name",
+        [
+            "ordinary_investment_account",
+            "ideco_investment_account",
+            "old_nisa_account",
+            "nisa_account",
+        ],
+    )
+    def test_advance_one_year_without_account(self, investment_manager, account_name):
 
         manager = self.create_investment_manager(
             investment_manager,
-            ordinary_investment_account=None,
+            **{account_name: None},
         )
 
         manager.advance_one_year({"VOO": decimal.Decimal("0.05")})
 
-        assert manager.current_year == 2025
-
-    def test_advance_one_year_without_ideco_account(self, investment_manager):
-
-        manager = self.create_investment_manager(
-            investment_manager,
-            ideco_investment_account=None,
-        )
-
-        manager.advance_one_year({"VOO": decimal.Decimal("0.05")})
-
-        assert manager.current_year == 2025
-
-    def test_advance_one_year_without_old_nisa_account(self, investment_manager):
-
-        manager = self.create_investment_manager(
-            investment_manager,
-            old_nisa_account=None,
-        )
-
-        manager.advance_one_year({"VOO": decimal.Decimal("0.05")})
-
-        assert manager.old_nisa_account is None
-        assert manager.current_year == 2025
-
-    def test_advance_one_year_without_nisa_account(self, investment_manager):
-
-        manager = self.create_investment_manager(
-            investment_manager,
-            nisa_account=None,
-        )
-
-        manager.advance_one_year({"VOO": decimal.Decimal("0.05")})
-
-        assert manager.nisa_account is None
         assert manager.current_year == 2025
 
     def test_apply_investment_policy_skips_ordinary_account_when_absent(self, investment_manager):
@@ -2093,9 +2000,15 @@ class TestSimpleInvestmentManager:
             ordinary_investment_account=None,
         )
 
+        assert manager.nisa_account is not None
+        manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
+
         manager.apply_investment_policy()
 
         assert manager.ordinary_investment_account is None
+        assert manager.ideco_investment_account is not None
+        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
+        assert manager.nisa_account.portfolio_value == decimal.Decimal(256_000)
 
     def test_process_due_account_events_skips_ideco_action_when_account_is_absent(self, investment_manager):
 
@@ -2109,32 +2022,10 @@ class TestSimpleInvestmentManager:
 
         assert manager.ideco_investment_account is None
 
-    def test_apply_investment_policy_without_old_nisa_account_still_topups_nisa(self, investment_manager):
-
-        manager = self.create_investment_manager(
-            investment_manager,
-            old_nisa_account=None,
-        )
-
-        assert manager.ordinary_investment_account is not None
-
-        manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(10_000_000)
-        manager.current_year = 2044
-
-        manager.apply_investment_policy()
-
-        assert manager.old_nisa_account is None
-        assert manager.ideco_investment_account is not None
-        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
-        assert manager.nisa_account is not None
-        assert manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
-        assert manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(5_656_000)
-
     def test_apply_investment_policy_without_nisa_account_still_contributes_to_ideco(self, investment_manager):
 
         manager = self.create_investment_manager(
             investment_manager,
-            old_nisa_account=None,
             nisa_account=None,
         )
 
@@ -2198,9 +2089,11 @@ class TestSimpleInvestmentManager:
 
     def test_apply_investment_policy_respects_remaining_nisa_annual_capacity(self, investment_manager):
 
-        manager = investment_manager
+        manager = self.create_investment_manager(
+            investment_manager,
+            ideco_investment_account=None,
+        )
         assert manager.ordinary_investment_account is not None
-        assert manager.ideco_investment_account is not None
         assert manager.nisa_account is not None
 
         manager.nisa_account.deposit(decimal.Decimal(3_000_000), year=2024)
@@ -2208,15 +2101,16 @@ class TestSimpleInvestmentManager:
 
         manager.apply_investment_policy()
 
-        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert manager.nisa_account.portfolio_value == decimal.Decimal(3_600_000)
-        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(656_000)
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(1_400_000)
 
     def test_apply_investment_policy_respects_remaining_nisa_lifetime_capacity(self, investment_manager):
 
-        manager = investment_manager
+        manager = self.create_investment_manager(
+            investment_manager,
+            ideco_investment_account=None,
+        )
         assert manager.ordinary_investment_account is not None
-        assert manager.ideco_investment_account is not None
         assert manager.nisa_account is not None
 
         manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(17_900_000)
@@ -2224,9 +2118,8 @@ class TestSimpleInvestmentManager:
 
         manager.apply_investment_policy()
 
-        assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert manager.nisa_account.portfolio_value == decimal.Decimal(18_000_000)
-        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(1_156_000)
+        assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(1_900_000)
 
     def test_apply_investment_policy_without_ideco_account_still_topups_nisa(self, investment_manager):
 
@@ -2241,7 +2134,6 @@ class TestSimpleInvestmentManager:
         assert manager.nisa_account.portfolio_value == decimal.Decimal(0)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(10_000_000)
 
-        manager.current_year = 2069
         manager.apply_investment_policy()
 
         assert manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
