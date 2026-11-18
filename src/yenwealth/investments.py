@@ -980,8 +980,8 @@ class _DepositAction:
 class _TransferAction:
     """Describe a prioritized transfer between two investment accounts."""
 
-    source_available_amount: typing.Callable[[], decimal.Decimal]
-    destination_remaining_capacity: typing.Callable[[], decimal.Decimal]
+    get_source_available_amount: typing.Callable[[], decimal.Decimal]
+    get_destination_remaining_capacity: typing.Callable[[], decimal.Decimal]
     withdraw: typing.Callable[[decimal.Decimal], None]
     deposit: typing.Callable[[decimal.Decimal], None]
     source_account_name: str
@@ -990,7 +990,7 @@ class _TransferAction:
     def execute(self) -> decimal.Decimal:
         """Transfer as much as both accounts currently allow."""
 
-        source_available = self.source_available_amount()
+        source_available = self.get_source_available_amount()
 
         if source_available < 0:
             raise ValueError(
@@ -998,7 +998,7 @@ class _TransferAction:
                 f"{source_available}"
             )
 
-        destination_capacity = self.destination_remaining_capacity()
+        destination_capacity = self.get_destination_remaining_capacity()
 
         if destination_capacity < 0:
             raise ValueError(
@@ -1032,7 +1032,6 @@ class SimpleInvestmentManager:
     Manage the configured accounts using a fixed contribution policy.
 
     The manager:
-
     - prioritizes depositing into iDeCo, NISA, and then ordinary account
     - prioritizes withdrawing from ordinary account, old NISA, and then NISA
     - transfers due old NISA holdings and the modeled iDeCo lump sum
@@ -1417,13 +1416,13 @@ class SimpleInvestmentManager:
             assert ideco_account is not None
             ideco_account.deposit(amount, age=self._current_age, year=self.current_year)
 
-        # First move funds from ordinary and NISA accounts into iDeCo if capacity exists
+        # First move funds from ordinary account into iDeCo if capacity exists
         if ordinary_account is not None and ideco_account is not None:
 
             actions.append(
                 _TransferAction(
-                    source_available_amount=lambda: ordinary_account.max_cash_withdrawal,
-                    destination_remaining_capacity=lambda: (
+                    get_source_available_amount=lambda: ordinary_account.max_cash_withdrawal,
+                    get_destination_remaining_capacity=lambda: (
                         ideco_account.get_remaining_contribution_capacity_for_target_year(
                             year=self.current_year,
                             age=self._current_age,
@@ -1441,8 +1440,8 @@ class SimpleInvestmentManager:
 
             actions.append(
                 _TransferAction(
-                    source_available_amount=lambda: nisa_account.portfolio_value,
-                    destination_remaining_capacity=lambda: (
+                    get_source_available_amount=lambda: nisa_account.portfolio_value,
+                    get_destination_remaining_capacity=lambda: (
                         ideco_account.get_remaining_contribution_capacity_for_target_year(
                             year=self.current_year,
                             age=self._current_age,
@@ -1460,8 +1459,8 @@ class SimpleInvestmentManager:
 
             actions.append(
                 _TransferAction(
-                    source_available_amount=lambda: ordinary_account.max_cash_withdrawal,
-                    destination_remaining_capacity=lambda: (
+                    get_source_available_amount=lambda: ordinary_account.max_cash_withdrawal,
+                    get_destination_remaining_capacity=lambda: (
                         nisa_account.get_remaining_contribution_capacity_for_target_year(
                             year=self.current_year
                         )

@@ -2304,8 +2304,8 @@ def test_transfer_action_rejects_negative_amounts(
     source_amount, destination_capacity, expected_message
 ):
     action = yenwealth.investments._TransferAction(
-        source_available_amount=lambda: source_amount,
-        destination_remaining_capacity=lambda: destination_capacity,
+        get_source_available_amount=lambda: source_amount,
+        get_destination_remaining_capacity=lambda: destination_capacity,
         withdraw=lambda amount: None,
         deposit=lambda amount: None,
         source_account_name="ordinary investment",
