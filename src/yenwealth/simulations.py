@@ -132,9 +132,9 @@ class FinancesSimulator:
         """
         Run the projection and return portfolio values indexed by age.
 
-        Each year applies the investment policy, income and living costs, and
-        returns after inflation. If a withdrawal cannot be met, later rows are
-        returned with missing values.
+        Each year applies due account events, income and living costs, the
+        investment policy, and returns after inflation. If a withdrawal cannot
+        be met, later rows are returned with missing values.
         """
 
         current_age = self.inputs.parameters.simulation_start_age
@@ -163,7 +163,7 @@ class FinancesSimulator:
 
                 LOGGER.debug(f"Simulating year {current_year} at age {current_age}")
 
-                self.investment_manager.optimize_investments()
+                self.investment_manager.process_due_account_events()
 
                 if LOGGER.isEnabledFor(logging.DEBUG):
 
@@ -205,6 +205,8 @@ class FinancesSimulator:
                         amount=surplus_funds,
                         age=current_age
                     )
+
+                self.investment_manager.apply_investment_policy()
 
                 if LOGGER.isEnabledFor(logging.DEBUG):
 
