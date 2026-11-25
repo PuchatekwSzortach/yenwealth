@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.8.0
+- improved - renamed methods on InvestmentManager for more clarity
+- improved - added documentation explaining how to implement a custom InvestmentManager
+
 ### 0.7.0
 - improved - IdecoInvestmentAccount is now modelled on rules and limits from December 2026
 - improved - most objects now accept DecimalInput (int, float or decimal.Decimal) instead of only decimal.Decimal for financial values

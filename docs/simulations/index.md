@@ -15,6 +15,11 @@ deposits a surplus, then applies investment returns after inflation. The result
 is a pandas DataFrame indexed by age, with gross and after-tax portfolio value
 and living costs.
 
+The simulator delegates account operations and investment decisions to an
+`InvestmentManager`. See the [investment manager guide](../investment-manager.md)
+for the yearly call order, lifecycle methods, and custom implementation
+requirements.
+
 Choose a [deterministic projection](deterministic.md) for one supplied economic
 path, or a [Monte Carlo projection](monte-carlo.md) to sample many paths from
 historical data. [Analyze simulation results](analysis.md) to calculate target
