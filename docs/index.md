@@ -29,6 +29,8 @@ While this shows the very basics, other files in `examples` show more realistic 
 - [Getting started](getting-started.md) walks through the included examples.
 - [Account model](account-model.md) explains the investment accounts and
   deposit and withdrawal priorities.
+- [Investment managers](investment-manager.md) explains how managers interact
+  with simulations and how to implement a custom manager.
 - [Simulation guides](simulations/index.md) cover deterministic and Monte Carlo
   projections, plus result analysis.
 
