@@ -35,11 +35,11 @@ class FakeInvestmentManager:
     def get_formatted_portfolio_summary_description(self) -> str:
         return "fake portfolio"
 
-    def process_due_account_events(self):
-        self.calls.append(("process_due_account_events", self.current_year))
+    def process_start_of_year_account_events(self):
+        self.calls.append(("process_start_of_year_account_events", self.current_year))
 
-    def apply_investment_policy(self):
-        self.calls.append(("apply_investment_policy", self.current_year))
+    def apply_post_cash_flow_investment_policy(self):
+        self.calls.append(("apply_post_cash_flow_investment_policy", self.current_year))
 
     def withdraw(self, desired_cash: yenwealth.numeric.DecimalInput):
         desired_cash = yenwealth.numeric.to_decimal(desired_cash)
@@ -420,9 +420,9 @@ def test_investment_manager_operations_are_called_in_correct_order():
     simulator.run_simulation()
 
     assert investment_manager.calls == [
-        ("process_due_account_events", 2026),
+        ("process_start_of_year_account_events", 2026),
         ("deposit", decimal.Decimal(20), 50),
-        ("apply_investment_policy", 2026),
+        ("apply_post_cash_flow_investment_policy", 2026),
         ("advance_one_year", 2027),
     ]
 

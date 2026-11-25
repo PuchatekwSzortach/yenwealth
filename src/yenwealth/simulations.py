@@ -163,7 +163,7 @@ class FinancesSimulator:
 
                 LOGGER.debug(f"Simulating year {current_year} at age {current_age}")
 
-                self.investment_manager.process_due_account_events()
+                self.investment_manager.process_start_of_year_account_events()
 
                 if LOGGER.isEnabledFor(logging.DEBUG):
 
@@ -206,7 +206,7 @@ class FinancesSimulator:
                         age=current_age
                     )
 
-                self.investment_manager.apply_investment_policy()
+                self.investment_manager.apply_post_cash_flow_investment_policy()
 
                 if LOGGER.isEnabledFor(logging.DEBUG):
 

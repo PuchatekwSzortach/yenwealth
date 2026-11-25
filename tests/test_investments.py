@@ -1993,7 +1993,7 @@ class TestSimpleInvestmentManager:
 
         assert manager.current_year == 2025
 
-    def test_apply_investment_policy_skips_ordinary_account_when_absent(self, investment_manager):
+    def test_apply_post_cash_flow_investment_policy_skips_ordinary_account_when_absent(self, investment_manager):
 
         manager = self.create_investment_manager(
             investment_manager,
@@ -2003,14 +2003,14 @@ class TestSimpleInvestmentManager:
         assert manager.nisa_account is not None
         manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
 
-        manager.apply_investment_policy()
+        manager.apply_post_cash_flow_investment_policy()
 
         assert manager.ordinary_investment_account is None
         assert manager.ideco_investment_account is not None
         assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert manager.nisa_account.portfolio_value == decimal.Decimal(256_000)
 
-    def test_process_due_account_events_skips_ideco_action_when_account_is_absent(self, investment_manager):
+    def test_process_start_of_year_account_events_skips_ideco_action_when_account_is_absent(self, investment_manager):
 
         manager = self.create_investment_manager(
             investment_manager,
@@ -2018,11 +2018,12 @@ class TestSimpleInvestmentManager:
         )
         manager.current_year = 2069
 
-        manager.process_due_account_events()
+        manager.process_start_of_year_account_events()
 
         assert manager.ideco_investment_account is None
 
-    def test_apply_investment_policy_without_nisa_account_still_contributes_to_ideco(self, investment_manager):
+    def test_apply_post_cash_flow_investment_policy_without_nisa_account_still_contributes_to_ideco(
+            self, investment_manager):
 
         manager = self.create_investment_manager(
             investment_manager,
@@ -2032,14 +2033,15 @@ class TestSimpleInvestmentManager:
         assert manager.ordinary_investment_account is not None
         manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(10_000_000)
 
-        manager.apply_investment_policy()
+        manager.apply_post_cash_flow_investment_policy()
 
         assert manager.nisa_account is None
         assert manager.ideco_investment_account is not None
         assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(9_256_000)
 
-    def test_apply_investment_policy_uses_nisa_to_fill_remaining_ideco_capacity(self, investment_manager):
+    def test_apply_post_cash_flow_investment_policy_uses_nisa_to_fill_remaining_ideco_capacity(
+            self, investment_manager):
 
         manager = investment_manager
         assert manager.ordinary_investment_account is not None
@@ -2049,14 +2051,15 @@ class TestSimpleInvestmentManager:
         manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(500_000)
         manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
 
-        manager.apply_investment_policy()
+        manager.apply_post_cash_flow_investment_policy()
 
         # Ordinary funds contribute first; NISA holdings cover the remaining iDeCo room.
         assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(0)
         assert manager.nisa_account.portfolio_value == decimal.Decimal(756_000)
 
-    def test_apply_investment_policy_moves_remaining_ordinary_funds_to_nisa(self, investment_manager):
+    def test_apply_post_cash_flow_investment_policy_moves_remaining_ordinary_funds_to_nisa(
+            self, investment_manager):
 
         manager = investment_manager
         assert manager.ordinary_investment_account is not None
@@ -2065,13 +2068,14 @@ class TestSimpleInvestmentManager:
 
         manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
 
-        manager.apply_investment_policy()
+        manager.apply_post_cash_flow_investment_policy()
 
         assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert manager.nisa_account.portfolio_value == decimal.Decimal(1_256_000)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(0)
 
-    def test_apply_investment_policy_respects_existing_ideco_contributions(self, investment_manager):
+    def test_apply_post_cash_flow_investment_policy_respects_existing_ideco_contributions(
+            self, investment_manager):
 
         manager = investment_manager
         assert manager.ordinary_investment_account is not None
@@ -2081,13 +2085,14 @@ class TestSimpleInvestmentManager:
         manager.ideco_investment_account.deposit(decimal.Decimal(500_000), age=30, year=2024)
         manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(1_000_000)
 
-        manager.apply_investment_policy()
+        manager.apply_post_cash_flow_investment_policy()
 
         assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(744_000)
         assert manager.nisa_account.portfolio_value == decimal.Decimal(756_000)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(0)
 
-    def test_apply_investment_policy_respects_remaining_nisa_annual_capacity(self, investment_manager):
+    def test_apply_post_cash_flow_investment_policy_respects_remaining_nisa_annual_capacity(
+            self, investment_manager):
 
         manager = self.create_investment_manager(
             investment_manager,
@@ -2099,12 +2104,13 @@ class TestSimpleInvestmentManager:
         manager.nisa_account.deposit(decimal.Decimal(3_000_000), year=2024)
         manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
 
-        manager.apply_investment_policy()
+        manager.apply_post_cash_flow_investment_policy()
 
         assert manager.nisa_account.portfolio_value == decimal.Decimal(3_600_000)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(1_400_000)
 
-    def test_apply_investment_policy_respects_remaining_nisa_lifetime_capacity(self, investment_manager):
+    def test_apply_post_cash_flow_investment_policy_respects_remaining_nisa_lifetime_capacity(
+            self, investment_manager):
 
         manager = self.create_investment_manager(
             investment_manager,
@@ -2116,12 +2122,13 @@ class TestSimpleInvestmentManager:
         manager.nisa_account.asset_map["VOO"].principal = decimal.Decimal(17_900_000)
         manager.ordinary_investment_account.asset_map["VOO"].principal = decimal.Decimal(2_000_000)
 
-        manager.apply_investment_policy()
+        manager.apply_post_cash_flow_investment_policy()
 
         assert manager.nisa_account.portfolio_value == decimal.Decimal(18_000_000)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(1_900_000)
 
-    def test_apply_investment_policy_without_ideco_account_still_topups_nisa(self, investment_manager):
+    def test_apply_post_cash_flow_investment_policy_without_ideco_account_still_topups_nisa(
+            self, investment_manager):
 
         manager = self.create_investment_manager(
             investment_manager,
@@ -2134,7 +2141,7 @@ class TestSimpleInvestmentManager:
         assert manager.nisa_account.portfolio_value == decimal.Decimal(0)
         assert manager.ordinary_investment_account.portfolio_value == decimal.Decimal(10_000_000)
 
-        manager.apply_investment_policy()
+        manager.apply_post_cash_flow_investment_policy()
 
         assert manager.nisa_account.asset_map["VOO"].principal == decimal.Decimal(3_600_000)
         assert manager.ordinary_investment_account.asset_map["VOO"].principal == decimal.Decimal(6_400_000)
@@ -2150,7 +2157,7 @@ class TestSimpleInvestmentManager:
         manager.current_year = 2069
 
         with pytest.raises(ValueError, match="ordinary investment account is not configured"):
-            manager.process_due_account_events()
+            manager.process_start_of_year_account_events()
 
         assert manager.ideco_investment_account is not None
         assert manager.ideco_investment_account.portfolio_value == decimal.Decimal(0)
@@ -2194,7 +2201,7 @@ class TestSimpleInvestmentManager:
         assert old_nisa_account.portfolio_value == decimal.Decimal(0)
         assert investment_manager.nisa_account.portfolio_value == decimal.Decimal(1_500_000)
 
-    def test_process_due_account_events_old_nisa_liquidation(self, investment_manager):
+    def test_process_start_of_year_account_events_old_nisa_liquidation(self, investment_manager):
 
         # Current year = start_year (2024) + age (50) - start_age (30) = 2044
         # 20 years prior = 2024. Populate Old NISA portfolio for 2024
@@ -2213,7 +2220,7 @@ class TestSimpleInvestmentManager:
         }
         investment_manager.current_year = 2044
 
-        investment_manager.process_due_account_events()
+        investment_manager.process_start_of_year_account_events()
 
         # 2024 Old NISA portfolio should be removed and moved into NISA Account
         assert 2024 not in old_nisa_account.year_to_asset_map
@@ -2232,8 +2239,8 @@ class TestSimpleInvestmentManager:
         # Year at which we hit age of 75, and ideco policy was set to do lump withdrawal at that age
         investment_manager.current_year = 2069
 
-        investment_manager.process_due_account_events()
-        investment_manager.apply_investment_policy()
+        investment_manager.process_start_of_year_account_events()
+        investment_manager.apply_post_cash_flow_investment_policy()
 
         # 1. iDeCo 10M transferred to Ordinary Account tax-free
         # 2. Ordinary Account then transfers 3.6M (annual limit) to NISA Account
@@ -2243,19 +2250,20 @@ class TestSimpleInvestmentManager:
         assert investment_manager.ordinary_investment_account.asset_map['VOO'].principal == decimal.Decimal(6_400_000)
         assert investment_manager.ideco_investment_account.has_started_drawing_pension is True
 
-    def test_process_due_account_events_starts_ideco_pension_at_configured_age(self, investment_manager):
+    def test_process_start_of_year_account_events_starts_ideco_pension_at_configured_age(
+            self, investment_manager):
 
         ideco_account = investment_manager.ideco_investment_account
         assert ideco_account is not None
         ideco_account.asset_map["VOO"].principal = decimal.Decimal(50_000_000)
 
         investment_manager.current_year = 2068  # Age 74, one year before configured start age.
-        investment_manager.process_due_account_events()
+        investment_manager.process_start_of_year_account_events()
 
         assert ideco_account.has_started_drawing_pension is False
 
         investment_manager.current_year = 2069  # Age 75, configured start age.
-        investment_manager.process_due_account_events()
+        investment_manager.process_start_of_year_account_events()
 
         assert ideco_account.has_started_drawing_pension is True
         assert ideco_account.portfolio_value > 0

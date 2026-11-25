@@ -930,13 +930,13 @@ class InvestmentManager(typing.Protocol):
         """
         ...
 
-    def process_due_account_events(self):
+    def process_start_of_year_account_events(self):
         """
         Apply account actions due at the current age or year before cash flow.
         """
         ...
 
-    def apply_investment_policy(self):
+    def apply_post_cash_flow_investment_policy(self):
         """
         Apply the investment policy after the current year's cash flow.
         """
@@ -1340,7 +1340,7 @@ class SimpleInvestmentManager:
 
             raise InsufficientFunds(f"Not enough funds to withdraw {desired_cash}")
 
-    def process_due_account_events(self):
+    def process_start_of_year_account_events(self):
         """
         Apply account actions due at the current age or year before cash flow.
         """
@@ -1387,7 +1387,7 @@ class SimpleInvestmentManager:
                 # so we can just call it with the lump sum
                 self.deposit(tax_free_lump_sum, age=self._current_age)
 
-    def apply_investment_policy(self):
+    def apply_post_cash_flow_investment_policy(self):
         """
         Move available funds into tax-advantaged accounts under the policy.
         """
