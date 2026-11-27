@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.9.0
+- improved - all calculations are now explictly rounding values to avoid fractional yen amounts
+- improved - Asset constructor now rounds down monetary inputs to avoid fractional yen amounts
+
 ### 0.8.0
 - improved - renamed methods on InvestmentManager for more clarity
 - improved - added documentation explaining how to implement a custom InvestmentManager

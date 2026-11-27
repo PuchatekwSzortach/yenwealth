@@ -8,7 +8,9 @@ import copy
 import dataclasses
 import decimal
 import enum
+import fractions
 import logging
+import math
 import typing
 
 import beartype
@@ -27,6 +29,55 @@ def _to_decimal_map(
     """
 
     return {name: numeric.to_decimal(value) for name, value in values.items()}
+
+
+def _require_whole_yen(value: numeric.DecimalInput, description: str) -> decimal.Decimal:
+    """Convert a value to Decimal and reject fractional-yen amounts."""
+
+    value = numeric.to_decimal(value)
+    if value != value.to_integral_value():
+        raise ValueError(f"{description} must be a whole-yen amount, got {value}")
+    return value
+
+
+def _validate_purchase_allocations(
+    amount: decimal.Decimal,
+    allocations: collections.abc.Mapping[str, decimal.Decimal],
+    asset_names: collections.abc.Collection[str],
+) -> None:
+    """Ensure a purchase strategy allocates the full whole-yen deposit safely."""
+
+    unknown_assets = set(allocations) - set(asset_names)
+
+    if unknown_assets:
+        raise ValueError(f"Purchase strategy includes unknown assets: {sorted(unknown_assets)}")
+
+    for name, allocation in allocations.items():
+        if allocation < 0 or allocation != allocation.quantize(constants.YEN):
+            raise ValueError(f"Purchase allocation for {name} must be a non-negative whole-yen amount")
+
+    if sum(allocations.values(), decimal.Decimal(0)) != amount:
+        raise ValueError(f"Purchase allocations must sum to deposit amount {amount}")
+
+
+def _validate_sale_allocations(
+    amount: decimal.Decimal,
+    allocations: collections.abc.Mapping[str, decimal.Decimal],
+    asset_names: collections.abc.Collection[str],
+) -> None:
+    """Ensure a sale strategy plans the full whole-yen withdrawal safely."""
+
+    unknown_assets = set(allocations) - set(asset_names)
+
+    if unknown_assets:
+        raise ValueError(f"Sale strategy includes unknown assets: {sorted(unknown_assets)}")
+
+    for name, allocation in allocations.items():
+        if allocation < 0 or allocation != allocation.quantize(constants.YEN):
+            raise ValueError(f"Sale allocation for {name} must be a non-negative whole-yen amount")
+
+    if sum(allocations.values(), decimal.Decimal(0)) != amount:
+        raise ValueError(f"Sale allocations must sum to withdrawal amount {amount}")
 
 
 class InsufficientFunds(Exception):
@@ -48,31 +99,32 @@ class Asset:
             annual_management_cost_rate: numeric.DecimalInput):
 
         self.name = name
-        self.principal = numeric.to_decimal(principal)
-        self.gain = numeric.to_decimal(gain)
+        self.principal = numeric.to_decimal(principal).quantize(constants.YEN, decimal.ROUND_DOWN)
+        self.gain = numeric.to_decimal(gain).quantize(constants.YEN, decimal.ROUND_DOWN)
         self.annual_management_cost_rate = numeric.to_decimal(annual_management_cost_rate)
 
     @property
     def value(self) -> decimal.Decimal:
         """
-        Return principal plus gain, rounded down to whole yen.
+        Return principal plus gain; both components are stored in whole yen.
         """
-        return (self.principal + self.gain).quantize(constants.YEN, decimal.ROUND_DOWN)
+        return self.principal + self.gain
 
     def advance_one_year(self, change_rate: numeric.DecimalInput):
         """
         Apply an annual return rate after the asset management cost.
         """
 
-        change_rate = numeric.to_decimal(change_rate)
-        self.gain += self.value * (change_rate - self.annual_management_cost_rate)
+        change_rate = numeric.to_decimal(change_rate) - self.annual_management_cost_rate
+        self.gain += (self.value * change_rate).quantize(constants.YEN, decimal.ROUND_DOWN)
 
     def sell(self, amount: numeric.DecimalInput):
         """
-        Sell ``amount`` yen, reducing principal and gain proportionally.
+        Sell whole-yen ``amount``, reducing gain proportionally and assigning
+        the remaining sale amount to principal.
         """
 
-        amount = numeric.to_decimal(amount)
+        amount = _require_whole_yen(amount, "Sale amount")
 
         if amount < 0:
             raise ValueError(f"amount value should be non-negative, got {amount}")
@@ -82,9 +134,12 @@ class Asset:
                 f"amount value {amount} exceeds current value {self.value}"
             )
 
+        if amount == 0:
+            return
+
         gain_ratio = self.gain / self.value
 
-        withdrawal_from_gain = gain_ratio * amount
+        withdrawal_from_gain = (gain_ratio * amount).quantize(constants.YEN, decimal.ROUND_DOWN)
         withdrawal_from_principal = amount - withdrawal_from_gain
 
         self.principal -= withdrawal_from_principal
@@ -95,7 +150,7 @@ class Asset:
         Add a positive deposit to the asset principal.
         """
 
-        amount = numeric.to_decimal(amount)
+        amount = _require_whole_yen(amount, "Purchase amount")
 
         if amount <= 0:
             raise ValueError(f"amount value should be non-negative, got {amount}")
@@ -140,6 +195,8 @@ class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
             asset: numeric.to_decimal(weight)
             for asset, weight in weights.items()
         }
+        if any(weight < 0 for weight in self.weights.values()):
+            raise ValueError("Weights must be non-negative")
 
     @property
     def asset_names(self) -> set[str]:
@@ -148,13 +205,15 @@ class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
     @beartype.beartype
     def allocate(self, amount: numeric.DecimalInput, assets: list[str]) -> dict[str, decimal.Decimal]:
         """
-        Allocate ``amount`` across ``assets`` using normalized weights.
+        Allocate whole-yen ``amount`` across ``assets`` using normalized weights.
 
         Assets with zero weight receive no allocation. Every requested asset must
         have a configured weight, and their combined weight must be positive.
+        Any remainder yen are assigned by largest fractional remainder, with
+        asset order breaking ties.
         """
 
-        amount = numeric.to_decimal(amount)
+        amount = _require_whole_yen(amount, "Deposit amount")
         missing = set(assets) - self.weights.keys()
 
         if missing:
@@ -165,16 +224,37 @@ class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
             for asset in assets
         }
 
-        total_weight = sum(weights.values(), decimal.Decimal(0))
+        total_weight_fraction = sum((fractions.Fraction(weight) for weight in weights.values()), fractions.Fraction(0))
 
-        if total_weight <= 0:
+        if total_weight_fraction <= 0:
             raise ValueError("Total weight must be positive")
 
-        return {
-            asset: amount * weight / total_weight
+        exact_allocations_by_asset_name = {
+            asset: fractions.Fraction(int(amount)) * fractions.Fraction(weight) / total_weight_fraction
             for asset, weight in weights.items()
             if weight != 0
         }
+
+        whole_yen_allocations_by_asset_name = {
+            asset: decimal.Decimal(math.floor(value))
+            for asset, value in exact_allocations_by_asset_name.items()
+        }
+
+        remaining_yen = int(amount - sum(whole_yen_allocations_by_asset_name.values(), decimal.Decimal(0)))
+        asset_order = {asset: index for index, asset in enumerate(exact_allocations_by_asset_name)}
+
+        remainder_distribution_order = sorted(
+            exact_allocations_by_asset_name,
+            key=lambda asset: (
+                -(exact_allocations_by_asset_name[asset] - int(whole_yen_allocations_by_asset_name[asset])),
+                asset_order[asset]
+            ),
+        )
+
+        for asset in remainder_distribution_order[:remaining_yen]:
+            whole_yen_allocations_by_asset_name[asset] += decimal.Decimal(1)
+
+        return whole_yen_allocations_by_asset_name
 
 
 @typing.runtime_checkable
@@ -243,7 +323,7 @@ class SequentialAssetSaleStrategy(AssetSaleStrategy):
         Plan sales in ``sale_order`` using the available asset values.
         """
 
-        amount = numeric.to_decimal(amount)
+        amount = _require_whole_yen(amount, "Withdrawal amount")
 
         target_asset_map = {
             name: numeric.to_decimal(value)
@@ -322,7 +402,7 @@ class OrdinaryInvestmentAccount:
         Allocate a positive deposit across the account's assets.
         """
 
-        amount = numeric.to_decimal(amount)
+        amount = _require_whole_yen(amount, "Deposit amount")
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -331,6 +411,8 @@ class OrdinaryInvestmentAccount:
             amount=amount,
             assets=list(self.asset_map.keys())
         )
+
+        _validate_purchase_allocations(amount, allocations, self.asset_map)
 
         for name, allocation in allocations.items():
             self.asset_map[name].buy(allocation)
@@ -345,9 +427,79 @@ class OrdinaryInvestmentAccount:
         for name, asset in self.asset_map.items():
             asset.advance_one_year(decimal_returns[name])
 
+    def _get_net_proceeds_for_sale(
+        self,
+        asset: Asset,
+        gross_sale: numeric.DecimalInput,
+    ) -> decimal.Decimal:
+        """Return proceeds after tax for a whole-yen sale of ``asset``."""
+
+        gross_sale = _require_whole_yen(gross_sale, "Sale amount")
+
+        if gross_sale < 0:
+            raise ValueError(f"Sale amount should be non-negative, got {gross_sale}")
+
+        if gross_sale > asset.value:
+            raise InsufficientFunds(
+                f"Sale amount {gross_sale} exceeds current value {asset.value}"
+            )
+
+        if gross_sale == 0:
+            return decimal.Decimal(0)
+
+        realized_gain = (
+            max(asset.gain, decimal.Decimal(0)) * gross_sale / asset.value
+        ).quantize(constants.YEN, decimal.ROUND_DOWN)
+
+        tax = (realized_gain * self.capital_gain_tax_rate).quantize(constants.YEN, decimal.ROUND_DOWN)
+
+        return gross_sale - tax
+
     def _get_net_asset_value(self, asset: Asset) -> decimal.Decimal:
-        taxable_gain = max(asset.gain, decimal.Decimal(0))
-        return asset.value - (taxable_gain * self.capital_gain_tax_rate)
+        return self._get_net_proceeds_for_sale(asset, asset.value)
+
+    def _get_gross_sale_for_net_proceeds(
+        self,
+        asset: Asset,
+        net_proceeds: decimal.Decimal,
+    ) -> decimal.Decimal:
+        """Find the smallest whole-yen sale that provides ``net_proceeds``."""
+
+        net_proceeds = _require_whole_yen(net_proceeds, "Net sale proceeds")
+
+        if net_proceeds < 0:
+            raise ValueError(f"Net sale proceeds should be non-negative, got {net_proceeds}")
+
+        if net_proceeds == 0:
+            return decimal.Decimal(0)
+
+        max_net_proceeds = self._get_net_asset_value(asset)
+
+        if max_net_proceeds < net_proceeds:
+            raise InsufficientFunds(
+                f"Net sale proceeds {net_proceeds} exceed the asset's net value "
+                f"{max_net_proceeds}"
+            )
+
+        # Tax is rounded down to whole yen, so selling slightly less can produce
+        # the same net proceeds as liquidating the whole asset. When the sale
+        # plan uses all net value, sell all of the gross value too.
+        if net_proceeds == max_net_proceeds:
+            return asset.value
+
+        low = 0
+        high = int(asset.value)
+
+        while low < high:
+            middle = (low + high) // 2
+            proceeds = self._get_net_proceeds_for_sale(asset, decimal.Decimal(middle))
+
+            if proceeds >= net_proceeds:
+                high = middle
+            else:
+                low = middle + 1
+
+        return decimal.Decimal(low)
 
     @property
     def _asset_to_net_value_map(self) -> dict[str, decimal.Decimal]:
@@ -361,7 +513,7 @@ class OrdinaryInvestmentAccount:
         Sell enough assets to provide ``desired_cash`` after modeled tax.
         """
 
-        desired_cash = numeric.to_decimal(desired_cash)
+        desired_cash = _require_whole_yen(desired_cash, "Withdrawal amount")
 
         if desired_cash > self.max_cash_withdrawal:
             raise InsufficientFunds(
@@ -373,14 +525,11 @@ class OrdinaryInvestmentAccount:
             asset_map=self._asset_to_net_value_map
         )
 
+        _validate_sale_allocations(desired_cash, net_cash_withdrawals, self.asset_map)
+
         for name, net_sale in net_cash_withdrawals.items():
-
             asset = self.asset_map[name]
-            taxable_gain = max(asset.gain, decimal.Decimal(0))
-            gain_ratio = taxable_gain / asset.value
-            net_proceeds_ratio = 1 - (gain_ratio * self.capital_gain_tax_rate)
-            gross_sale = net_sale / net_proceeds_ratio
-
+            gross_sale = self._get_gross_sale_for_net_proceeds(asset, net_sale)
             asset.sell(gross_sale)
 
     @property
@@ -490,7 +639,10 @@ class IdecoInvestmentAccount:
                 )
             other_annual_contributions = decimal.Decimal(0)
         else:
-            other_annual_contributions = numeric.to_decimal(annual_contributions_to_other_pensions_in_yen)
+            other_annual_contributions = _require_whole_yen(
+                annual_contributions_to_other_pensions_in_yen,
+                "Other annual pension contributions",
+            )
 
         if other_annual_contributions < 0:
             raise ValueError("annual_contributions_to_other_pensions_in_yen cannot be negative")
@@ -524,14 +676,17 @@ class IdecoInvestmentAccount:
         if age >= self.max_deposit_age or self.has_started_drawing_pension:
             return decimal.Decimal(0)
 
-        return self.max_annual_contribution - self.deposit_amount_by_year.get(year, decimal.Decimal(0))
+        return max(
+            decimal.Decimal(0),
+            self.max_annual_contribution - self.deposit_amount_by_year.get(year, decimal.Decimal(0)),
+        )
 
     def deposit(self, amount: numeric.DecimalInput, age: int, year: int):
         """
         Deposit a positive contribution within the annual limit.
         """
 
-        amount = numeric.to_decimal(amount)
+        amount = _require_whole_yen(amount, "Deposit amount")
 
         if self.has_started_drawing_pension:
             raise ValueError("Cannot deposit after pension drawing has started")
@@ -553,6 +708,7 @@ class IdecoInvestmentAccount:
             amount=amount,
             assets=list(self.asset_map.keys())
         )
+        _validate_purchase_allocations(amount, allocations, self.asset_map)
 
         for name, allocation in allocations.items():
             self.asset_map[name].buy(allocation)
@@ -604,7 +760,7 @@ class IdecoInvestmentAccount:
         withdrawal_proportion = decimal.Decimal(1) / decimal.Decimal(
             period_in_years - len(self.pension_payout_ages))
 
-        withdrawal = self.portfolio_value * withdrawal_proportion
+        withdrawal = (self.portfolio_value * withdrawal_proportion).quantize(constants.YEN, decimal.ROUND_DOWN)
         self._withdraw(withdrawal)
         self.pension_payout_ages.append(age)
 
@@ -612,10 +768,13 @@ class IdecoInvestmentAccount:
 
     def _withdraw(self, amount: decimal.Decimal):
 
+        amount = _require_whole_yen(amount, "Withdrawal amount")
+
         withdrawals = self.asset_sale_strategy.calculate_withdrawal_amounts(
             amount=amount,
             asset_map={name: asset.value for name, asset in self.asset_map.items()}
         )
+        _validate_sale_allocations(amount, withdrawals, self.asset_map)
 
         for name, withdrawal in withdrawals.items():
             self.asset_map[name].sell(withdrawal)
@@ -717,7 +876,7 @@ class OldNisaAccount:
         Withdraw ``desired_cash`` from holdings bought in ``portfolio_year``.
         """
 
-        desired_cash = numeric.to_decimal(desired_cash)
+        desired_cash = _require_whole_yen(desired_cash, "Withdrawal amount")
         asset_map = self.year_to_asset_map[portfolio_year]
         portfolio_value = decimal.Decimal(sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
 
@@ -728,6 +887,7 @@ class OldNisaAccount:
             amount=desired_cash,
             asset_map={name: asset.value for name, asset in asset_map.items()}
         )
+        _validate_sale_allocations(desired_cash, withdrawals, asset_map)
 
         for name, withdrawal in withdrawals.items():
             asset_map[name].sell(withdrawal)
@@ -737,7 +897,7 @@ class OldNisaAccount:
         Withdraw from investment years in oldest-to-newest order.
         """
 
-        desired_cash = numeric.to_decimal(desired_cash)
+        desired_cash = _require_whole_yen(desired_cash, "Withdrawal amount")
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
@@ -823,14 +983,17 @@ class NisaAccount:
         annual_capacity = self.annual_deposit_limit - self.year_to_deposit_map.get(year, decimal.Decimal(0))
         lifetime_capacity = self.total_deposit_limit - self.principal
 
-        return min(annual_capacity, lifetime_capacity)
+        return max(
+            decimal.Decimal(0),
+            min(annual_capacity, lifetime_capacity).quantize(constants.YEN, decimal.ROUND_DOWN),
+        )
 
     def deposit(self, amount: numeric.DecimalInput, year: int):
         """
         Deposit a positive amount in ``year`` within the configured limits.
         """
 
-        amount = numeric.to_decimal(amount)
+        amount = _require_whole_yen(amount, "Deposit amount")
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -853,6 +1016,7 @@ class NisaAccount:
             amount=amount,
             assets=list(self.asset_map.keys())
         )
+        _validate_purchase_allocations(amount, allocations, self.asset_map)
 
         for name, allocation in allocations.items():
             self.asset_map[name].buy(allocation)
@@ -874,7 +1038,7 @@ class NisaAccount:
         Withdraw a non-negative amount according to the configured sale plan.
         """
 
-        desired_cash = numeric.to_decimal(desired_cash)
+        desired_cash = _require_whole_yen(desired_cash, "Withdrawal amount")
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
@@ -886,6 +1050,7 @@ class NisaAccount:
             amount=desired_cash,
             asset_map={name: asset.value for name, asset in self.asset_map.items()}
         )
+        _validate_sale_allocations(desired_cash, withdrawals, self.asset_map)
 
         for name, withdrawal in withdrawals.items():
             self.asset_map[name].sell(withdrawal)
@@ -1286,7 +1451,7 @@ class SimpleInvestmentManager:
         Deposit surplus funds using the manager's account priority.
         """
 
-        amount = numeric.to_decimal(amount)
+        amount = _require_whole_yen(amount, "Deposit amount")
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")

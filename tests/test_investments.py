@@ -21,9 +21,26 @@ class TestAsset:
 
         asset.sell(decimal.Decimal(50))
 
-        assert asset.principal == decimal.Decimal("68.75")
-        assert asset.gain == decimal.Decimal("41.25")
+        assert asset.principal == decimal.Decimal(68)
+        assert asset.gain == decimal.Decimal(42)
         assert asset.value == decimal.Decimal(110)
+
+    def test_init_and_annual_return_keep_asset_state_in_whole_yen(self):
+
+        asset = yenwealth.investments.Asset(
+            name="whatever",
+            principal=decimal.Decimal("100.9"),
+            gain=decimal.Decimal("0.9"),
+            annual_management_cost_rate=decimal.Decimal(0),
+        )
+
+        assert asset.principal == decimal.Decimal(100)
+        assert asset.gain == decimal.Decimal(0)
+
+        asset.advance_one_year(decimal.Decimal("-0.01"))
+
+        assert asset.value == decimal.Decimal(99)
+        assert asset.gain == decimal.Decimal(-1)
 
     def test_sell_with_negative_gain(self):
 
@@ -99,6 +116,14 @@ class TestAsset:
         assert asset.gain == decimal.Decimal(60)
         assert asset.value == decimal.Decimal(180)
 
+    def test_buy_and_sell_reject_fractional_yen(self):
+        asset = yenwealth.investments.Asset("asset", 100, 0, 0)
+
+        with pytest.raises(ValueError, match="whole-yen"):
+            asset.buy(decimal.Decimal("0.5"))
+        with pytest.raises(ValueError, match="whole-yen"):
+            asset.sell(decimal.Decimal("0.5"))
+
     def test_init_converts_supported_numeric_values(self):
 
         asset = yenwealth.investments.Asset(
@@ -109,7 +134,7 @@ class TestAsset:
         )
 
         assert asset.principal == decimal.Decimal(100)
-        assert asset.gain == decimal.Decimal("0.5")
+        assert asset.gain == decimal.Decimal(0)
         assert asset.annual_management_cost_rate == decimal.Decimal("0.1")
         assert type(asset.principal) is decimal.Decimal
         assert type(asset.gain) is decimal.Decimal
@@ -126,19 +151,19 @@ class TestAsset:
 
         asset.sell(50.0)
 
-        assert asset.principal == decimal.Decimal("68.75")
-        assert asset.gain == decimal.Decimal("41.25")
+        assert asset.principal == decimal.Decimal(68)
+        assert asset.gain == decimal.Decimal(42)
         assert type(asset.principal) is decimal.Decimal
         assert type(asset.gain) is decimal.Decimal
 
         asset.advance_one_year(change_rate=0.15)
 
-        assert asset.gain == decimal.Decimal("46.75")
+        assert asset.gain == decimal.Decimal(47)
         assert type(asset.gain) is decimal.Decimal
 
         asset.buy(20)
 
-        assert asset.principal == decimal.Decimal("88.75")
+        assert asset.principal == decimal.Decimal(88)
         assert type(asset.principal) is decimal.Decimal
 
     @pytest.mark.parametrize(
@@ -205,6 +230,13 @@ class TestProportionalAssetPurchaseStrategy:
             "VGT": decimal.Decimal(5000),
             "S&P500": decimal.Decimal(10000),
         }
+
+    def test_allocates_remainder_yen_deterministically(self):
+        strategy = yenwealth.investments.ProportionalAssetPurchaseStrategy({"a": 1, "b": 1, "c": 1})
+
+        result = strategy.allocate(5, ["a", "b", "c"])
+
+        assert result == {"a": decimal.Decimal(2), "b": decimal.Decimal(2), "c": decimal.Decimal(1)}
 
     def test_allocation_with_zero_weight(self):
 
@@ -408,8 +440,8 @@ class TestOrdinaryInvestmentAccount:
 
         account.deposit(amount=decimal.Decimal(10))
 
-        assert account.asset_map["VGT"].principal == decimal.Decimal("12.5")
-        assert account.asset_map["VOO"].principal == decimal.Decimal("27.5")
+        assert account.asset_map["VGT"].principal == decimal.Decimal(13)
+        assert account.asset_map["VOO"].principal == decimal.Decimal(27)
 
     def test_advance_one_year(self):
 
@@ -441,7 +473,7 @@ class TestOrdinaryInvestmentAccount:
             }
         )
 
-        assert account.asset_map["VGT"].gain == decimal.Decimal("6.5")
+        assert account.asset_map["VGT"].gain == decimal.Decimal(6)
         assert account.asset_map["VOO"].gain == decimal.Decimal(0)
 
     def test_withdraw_over_portfolio_value(self):
@@ -500,7 +532,7 @@ class TestOrdinaryInvestmentAccount:
         with pytest.raises(yenwealth.investments.InsufficientFunds):
 
             account.withdraw(
-                desired_cash=account.max_cash_withdrawal + decimal.Decimal("0.5")
+                desired_cash=account.max_cash_withdrawal + decimal.Decimal(1)
             )
 
     def test_withdraw(self):
@@ -536,15 +568,15 @@ class TestOrdinaryInvestmentAccount:
         # Then VOO needs to provide net amount of 3150 units.
         # VOO has 80% gain and we need to pay 50% capital gain tax on it, so net cash per 1 unit sold should be
         # 1 - (0.8 * 0.5) = 0.6.
-        # So to realize 3150 units of net cash, we need a gross sale of 3150 / 0.6 or 5250.
-        # 20% of VOO is principal, and 20% of 5250 is 1050, so principal should go down from 2000 to 950.
-        # Remaining 4200 comes from gain, so gain should come down to 3800
+        # With whole-yen gain and tax rounding, selling 5249 from VOO realizes 4199
+        # yen of gain, incurs 2099 yen of tax, and provides 3150 yen net.
+        # The principal reduction is 1050 yen, leaving 950 principal and 3801 gain.
 
         assert account.asset_map["VGT"].value == decimal.Decimal(0)
 
         assert account.asset_map["VOO"].principal == decimal.Decimal(950)
-        assert account.asset_map["VOO"].gain == decimal.Decimal(3800)
-        assert account.asset_map["VOO"].value == decimal.Decimal(4750)
+        assert account.asset_map["VOO"].gain == decimal.Decimal(3801)
+        assert account.asset_map["VOO"].value == decimal.Decimal(4751)
 
     def test_withdraw_with_negative_gain(self):
 
@@ -679,7 +711,7 @@ class TestOrdinaryInvestmentAccount:
             capital_gain_tax_rate=0.2,
         )
 
-        account.deposit(10.5)
+        account.deposit(10)
         account.advance_one_year({"VOO": 0.1})
         account.withdraw(2)
 
@@ -903,12 +935,12 @@ class TestIdecoInvestmentAccount:
             ideco_pension_payout_plan=self.create_payout_plan(start_age=65, period_in_years=10),
         )
 
-        account.deposit(20.5, age=40, year=2024)
+        account.deposit(20, age=40, year=2024)
         account.advance_one_year({"VOO": 0.1})
 
         assert type(asset.principal) is decimal.Decimal
         assert type(asset.gain) is decimal.Decimal
-        assert asset.principal == decimal.Decimal("120.5")
+        assert asset.principal == decimal.Decimal(120)
 
     def test_deposit_succeeds_before_pension_and_fails_after(self):
 
@@ -929,8 +961,8 @@ class TestIdecoInvestmentAccount:
             year=2024,
         )
 
-        assert ideco.asset_map["VGT"].principal == decimal.Decimal("12.5")
-        assert ideco.asset_map["VOO"].principal == decimal.Decimal("27.5")
+        assert ideco.asset_map["VGT"].principal == decimal.Decimal(13)
+        assert ideco.asset_map["VOO"].principal == decimal.Decimal(27)
 
         ideco.start_pension_scheme(age=75)
 
@@ -957,7 +989,7 @@ class TestIdecoInvestmentAccount:
             }
         )
 
-        assert ideco.asset_map["VGT"].gain == decimal.Decimal("6.5")
+        assert ideco.asset_map["VGT"].gain == decimal.Decimal(6)
         assert ideco.asset_map["VOO"].gain == decimal.Decimal(0)
 
     def test_withdrawing_pensions_without_initializing_it_first(self):
@@ -1042,27 +1074,39 @@ class TestIdecoInvestmentAccount:
         # First withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
         amount = ideco.withdraw_pension(age=70)
-        assert abs(amount - (portfolio_value_before_withdrawal / 5)) < decimal.Decimal("0.001")
+
+        assert amount == (portfolio_value_before_withdrawal / 5).quantize(
+            yenwealth.constants.YEN, decimal.ROUND_DOWN
+        )
 
         # Second withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
         amount = ideco.withdraw_pension(age=71)
-        assert abs(amount - (portfolio_value_before_withdrawal / 4)) < decimal.Decimal("0.001")
+
+        assert amount == (portfolio_value_before_withdrawal / 4).quantize(
+            yenwealth.constants.YEN, decimal.ROUND_DOWN
+        )
 
         # Third withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
         amount = ideco.withdraw_pension(age=72)
-        assert abs(amount - (portfolio_value_before_withdrawal / 3)) < decimal.Decimal("0.001")
+
+        assert amount == (portfolio_value_before_withdrawal / 3).quantize(
+            yenwealth.constants.YEN, decimal.ROUND_DOWN
+        )
 
         # # Fourth withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
         amount = ideco.withdraw_pension(age=73)
-        assert abs(amount - (portfolio_value_before_withdrawal / 2)) < decimal.Decimal("0.001")
+
+        assert amount == (portfolio_value_before_withdrawal / 2).quantize(
+            yenwealth.constants.YEN, decimal.ROUND_DOWN
+        )
 
         # Last withdrawal
         portfolio_value_before_withdrawal = ideco.portfolio_value
         amount = ideco.withdraw_pension(age=74)
-        assert abs(amount - portfolio_value_before_withdrawal) < decimal.Decimal("0.001")
+        assert amount == portfolio_value_before_withdrawal
 
         assert ideco.portfolio_value == decimal.Decimal(0)
 
@@ -1251,7 +1295,7 @@ class TestOldNisaAccount:
         )
 
         account.advance_one_year({"VOO": 0.1}, year=2021)
-        account.withdraw_for_year(portfolio_year=2020, desired_cash=5.5)
+        account.withdraw_for_year(portfolio_year=2020, desired_cash=5)
         account.withdraw(2)
 
         asset = account.year_to_asset_map[2020]["VOO"]
@@ -1427,9 +1471,10 @@ class TestNisaAccount:
             gain=0,
             annual_management_cost_rate=0,
         )
+
         account = self.build_account({"VOO": asset})
 
-        account.deposit(20.5, year=2025)
+        account.deposit(20, year=2025)
         account.advance_one_year({"VOO": 0.1})
         account.withdraw(2)
 
@@ -1461,6 +1506,40 @@ class TestNisaAccount:
 
             # Over limit for target year
             nisa.deposit(amount=decimal.Decimal(2_000_000), year=2025)
+
+    def test_remaining_lifetime_capacity_cannot_be_exceeded(self):
+
+        nisa = self.build_account(
+            asset_map={
+                "a": yenwealth.investments.Asset(
+                    name="a",
+                    principal=decimal.Decimal(17_185_635),
+                    gain=decimal.Decimal(0),
+                    annual_management_cost_rate=decimal.Decimal(0),
+                ),
+                "b": yenwealth.investments.Asset(
+                    name="b",
+                    principal=decimal.Decimal(0),
+                    gain=decimal.Decimal(0),
+                    annual_management_cost_rate=decimal.Decimal(0),
+                ),
+            },
+            asset_purchase_strategy=yenwealth.investments.ProportionalAssetPurchaseStrategy(
+                weights={"a": decimal.Decimal(1), "b": decimal.Decimal(1)}
+            ),
+            asset_sale_strategy=yenwealth.investments.SequentialAssetSaleStrategy(["a", "b"]),
+        )
+
+        capacity = nisa.get_remaining_contribution_capacity_for_target_year(2026)
+        assert capacity == decimal.Decimal(814_365)
+
+        nisa.deposit(capacity, year=2026)
+
+        assert nisa.principal == nisa.total_deposit_limit
+        assert nisa.get_remaining_contribution_capacity_for_target_year(2026) == decimal.Decimal(0)
+
+        with pytest.raises(ValueError, match="total deposit limit"):
+            nisa.deposit(decimal.Decimal(1), year=2026)
 
     def test_deposit(self):
 
@@ -2292,7 +2371,7 @@ class TestSimpleInvestmentManager:
             simulation_start_year=2025,
         )
 
-        manager.deposit(10.5, age=30)
+        manager.deposit(10, age=30)
         manager.advance_one_year({"VOO": 0.1})
         manager.withdraw(2)
 
