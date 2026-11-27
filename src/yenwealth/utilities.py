@@ -6,6 +6,19 @@ import decimal
 
 import pandas
 
+from . import numeric
+
+
+def require_whole_yen(value: numeric.DecimalInput, description: str) -> decimal.Decimal:
+    """Convert a value to Decimal and reject fractional or non-finite yen amounts."""
+
+    amount = numeric.to_decimal(value)
+
+    if not amount.is_finite() or amount != amount.to_integral_value():
+        raise ValueError(f"{description} must be a whole-yen amount, got {amount}")
+
+    return amount
+
 
 def format_million_yen(value: float | decimal.Decimal) -> str:
     """

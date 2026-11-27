@@ -31,15 +31,6 @@ def _to_decimal_map(
     return {name: numeric.to_decimal(value) for name, value in values.items()}
 
 
-def _require_whole_yen(value: numeric.DecimalInput, description: str) -> decimal.Decimal:
-    """Convert a value to Decimal and reject fractional-yen amounts."""
-
-    value = numeric.to_decimal(value)
-    if value != value.to_integral_value():
-        raise ValueError(f"{description} must be a whole-yen amount, got {value}")
-    return value
-
-
 def _validate_purchase_allocations(
     amount: decimal.Decimal,
     allocations: collections.abc.Mapping[str, decimal.Decimal],
@@ -124,7 +115,7 @@ class Asset:
         the remaining sale amount to principal.
         """
 
-        amount = _require_whole_yen(amount, "Sale amount")
+        amount = utilities.require_whole_yen(amount, "Sale amount")
 
         if amount < 0:
             raise ValueError(f"amount value should be non-negative, got {amount}")
@@ -150,7 +141,7 @@ class Asset:
         Add a positive deposit to the asset principal.
         """
 
-        amount = _require_whole_yen(amount, "Purchase amount")
+        amount = utilities.require_whole_yen(amount, "Purchase amount")
 
         if amount <= 0:
             raise ValueError(f"amount value should be non-negative, got {amount}")
@@ -213,7 +204,7 @@ class ProportionalAssetPurchaseStrategy(AssetPurchaseStrategy):
         asset order breaking ties.
         """
 
-        amount = _require_whole_yen(amount, "Deposit amount")
+        amount = utilities.require_whole_yen(amount, "Deposit amount")
         missing = set(assets) - self.weights.keys()
 
         if missing:
@@ -323,7 +314,7 @@ class SequentialAssetSaleStrategy(AssetSaleStrategy):
         Plan sales in ``sale_order`` using the available asset values.
         """
 
-        amount = _require_whole_yen(amount, "Withdrawal amount")
+        amount = utilities.require_whole_yen(amount, "Withdrawal amount")
 
         target_asset_map = {
             name: numeric.to_decimal(value)
@@ -402,7 +393,7 @@ class OrdinaryInvestmentAccount:
         Allocate a positive deposit across the account's assets.
         """
 
-        amount = _require_whole_yen(amount, "Deposit amount")
+        amount = utilities.require_whole_yen(amount, "Deposit amount")
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -434,7 +425,7 @@ class OrdinaryInvestmentAccount:
     ) -> decimal.Decimal:
         """Return proceeds after tax for a whole-yen sale of ``asset``."""
 
-        gross_sale = _require_whole_yen(gross_sale, "Sale amount")
+        gross_sale = utilities.require_whole_yen(gross_sale, "Sale amount")
 
         if gross_sale < 0:
             raise ValueError(f"Sale amount should be non-negative, got {gross_sale}")
@@ -465,7 +456,7 @@ class OrdinaryInvestmentAccount:
     ) -> decimal.Decimal:
         """Find the smallest whole-yen sale that provides ``net_proceeds``."""
 
-        net_proceeds = _require_whole_yen(net_proceeds, "Net sale proceeds")
+        net_proceeds = utilities.require_whole_yen(net_proceeds, "Net sale proceeds")
 
         if net_proceeds < 0:
             raise ValueError(f"Net sale proceeds should be non-negative, got {net_proceeds}")
@@ -513,7 +504,7 @@ class OrdinaryInvestmentAccount:
         Sell enough assets to provide ``desired_cash`` after modeled tax.
         """
 
-        desired_cash = _require_whole_yen(desired_cash, "Withdrawal amount")
+        desired_cash = utilities.require_whole_yen(desired_cash, "Withdrawal amount")
 
         if desired_cash > self.max_cash_withdrawal:
             raise InsufficientFunds(
@@ -639,7 +630,7 @@ class IdecoInvestmentAccount:
                 )
             other_annual_contributions = decimal.Decimal(0)
         else:
-            other_annual_contributions = _require_whole_yen(
+            other_annual_contributions = utilities.require_whole_yen(
                 annual_contributions_to_other_pensions_in_yen,
                 "Other annual pension contributions",
             )
@@ -686,7 +677,7 @@ class IdecoInvestmentAccount:
         Deposit a positive contribution within the annual limit.
         """
 
-        amount = _require_whole_yen(amount, "Deposit amount")
+        amount = utilities.require_whole_yen(amount, "Deposit amount")
 
         if self.has_started_drawing_pension:
             raise ValueError("Cannot deposit after pension drawing has started")
@@ -768,7 +759,7 @@ class IdecoInvestmentAccount:
 
     def _withdraw(self, amount: decimal.Decimal):
 
-        amount = _require_whole_yen(amount, "Withdrawal amount")
+        amount = utilities.require_whole_yen(amount, "Withdrawal amount")
 
         withdrawals = self.asset_sale_strategy.calculate_withdrawal_amounts(
             amount=amount,
@@ -876,7 +867,7 @@ class OldNisaAccount:
         Withdraw ``desired_cash`` from holdings bought in ``portfolio_year``.
         """
 
-        desired_cash = _require_whole_yen(desired_cash, "Withdrawal amount")
+        desired_cash = utilities.require_whole_yen(desired_cash, "Withdrawal amount")
         asset_map = self.year_to_asset_map[portfolio_year]
         portfolio_value = decimal.Decimal(sum((asset.value for asset in asset_map.values()), decimal.Decimal(0)))
 
@@ -897,7 +888,7 @@ class OldNisaAccount:
         Withdraw from investment years in oldest-to-newest order.
         """
 
-        desired_cash = _require_whole_yen(desired_cash, "Withdrawal amount")
+        desired_cash = utilities.require_whole_yen(desired_cash, "Withdrawal amount")
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
@@ -993,7 +984,7 @@ class NisaAccount:
         Deposit a positive amount in ``year`` within the configured limits.
         """
 
-        amount = _require_whole_yen(amount, "Deposit amount")
+        amount = utilities.require_whole_yen(amount, "Deposit amount")
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
@@ -1038,7 +1029,7 @@ class NisaAccount:
         Withdraw a non-negative amount according to the configured sale plan.
         """
 
-        desired_cash = _require_whole_yen(desired_cash, "Withdrawal amount")
+        desired_cash = utilities.require_whole_yen(desired_cash, "Withdrawal amount")
 
         if desired_cash < 0:
             raise ValueError(f"Withdrawal value should be non-negative, got {desired_cash}")
@@ -1451,7 +1442,7 @@ class SimpleInvestmentManager:
         Deposit surplus funds using the manager's account priority.
         """
 
-        amount = _require_whole_yen(amount, "Deposit amount")
+        amount = utilities.require_whole_yen(amount, "Deposit amount")
 
         if amount <= 0:
             raise ValueError(f"Deposit amount should be positive, got {amount}")
