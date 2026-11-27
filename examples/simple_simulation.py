@@ -18,12 +18,12 @@ def earned_annual_income(
     *,
     ideco_account: yenwealth.investments.IdecoInvestmentAccount,
     ideco_payout_plan: yenwealth.investments.IdecoPensionPayoutPlan,
-) -> decimal.Decimal:
-    income = decimal.Decimal(5_000_000) if age < 65 else decimal.Decimal(2_000_000)
+) -> int:
+    income = 5_000_000 if age < 65 else 2_000_000
     payout_end_age = ideco_payout_plan.start_age + ideco_payout_plan.period_in_years
 
     if ideco_payout_plan.start_age <= age < payout_end_age:
-        income += ideco_account.withdraw_pension(age)
+        income += int(ideco_account.withdraw_pension(age))
 
     return income
 
@@ -87,7 +87,7 @@ def create_simulation_inputs(
             simulation_start_year=simulation_start_year,
         ),
         runtime=yenwealth.simulations.FinancesSimulatorRuntime(
-            annual_costs_callable=lambda age: decimal.Decimal(4_000_000),
+            annual_costs_callable=lambda age: 4_000_000,
             earned_annual_income_callable=income_callable,
             investment_manager=yenwealth.investments.SimpleInvestmentManager(
                 ordinary_investment_account=yenwealth.investments.OrdinaryInvestmentAccount(

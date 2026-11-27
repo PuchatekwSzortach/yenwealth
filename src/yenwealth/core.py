@@ -10,7 +10,7 @@ class AnnualCostsOfLiving(typing.Protocol):
     Describe a callable that returns annual living costs for an age.
     """
 
-    def __call__(self, age: int) -> numeric.DecimalInput:
+    def __call__(self, age: int) -> int:
         """
         Return annual living costs in yen for ``age``.
         """
@@ -22,7 +22,7 @@ class EarnedAnnualIncome(typing.Protocol):
     Describe a callable that returns annual earned income for an age.
     """
 
-    def __call__(self, age: int) -> numeric.DecimalInput:
+    def __call__(self, age: int) -> int:
         """
         Return annual earned income in yen for ``age``.
         """

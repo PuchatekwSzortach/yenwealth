@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.10.0
+- improved - __call__ methods of AnnualCostsOfLiving and EarnedAnnualIncome protocols now use int for return value
+- improved - FinancesSimulator.run_simulation now validates that earned_income and cost_of_living callbacks provide whole yen amounts
+
 ### 0.9.0
 - improved - all calculations are now explicitly rounding values to avoid fractional yen amounts
 - improved - Asset constructor now rounds down monetary inputs to avoid fractional yen amounts

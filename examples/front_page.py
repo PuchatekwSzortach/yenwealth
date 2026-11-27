@@ -1,5 +1,3 @@
-import decimal
-
 import pandas
 
 import yenwealth.investments
@@ -42,9 +40,7 @@ def main() -> None:
         ),
         runtime=yenwealth.simulations.FinancesSimulatorRuntime(
             annual_costs_callable=lambda age: 4_000_000,
-            earned_annual_income_callable=lambda age: (
-                5_000_000 if age < 65 else decimal.Decimal(2_000_000)
-            ),
+            earned_annual_income_callable=lambda age: 5_000_000 if age < 65 else 2_000_000,
             investment_manager=yenwealth.investments.SimpleInvestmentManager(
                 ordinary_investment_account=yenwealth.investments.OrdinaryInvestmentAccount(
                     asset_map={

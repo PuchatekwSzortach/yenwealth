@@ -4,6 +4,7 @@ Tests for simulations module
 
 import collections.abc
 import decimal
+import typing
 
 import numpy
 import pandas
@@ -95,8 +96,8 @@ def make_inputs(
             simulation_start_year=start_year
         ),
         runtime=yenwealth.simulations.FinancesSimulatorRuntime(
-            annual_costs_callable=lambda age: costs,
-            earned_annual_income_callable=lambda age: income,
+            annual_costs_callable=typing.cast(yenwealth.core.AnnualCostsOfLiving, lambda age: costs),
+            earned_annual_income_callable=typing.cast(yenwealth.core.EarnedAnnualIncome, lambda age: income),
             investment_manager=investment_manager
         ),
         simulated_economic_data=simulated_economic_data
@@ -332,7 +333,7 @@ def test_income_equal_to_costs_causes_neither():
     assert "deposit" not in called_methods
 
 
-def test_simulation_converts_numeric_callback_and_economic_data_values_to_decimal():
+def test_simulation_converts_whole_yen_callback_and_economic_data_values_to_decimal():
 
     investment_manager = FakeInvestmentManager(
         portfolio_value=decimal.Decimal(100),
@@ -349,14 +350,42 @@ def test_simulation_converts_numeric_callback_and_economic_data_values_to_decima
         end_age=50,
     )
     inputs.runtime.annual_costs_callable = lambda age: 100
-    inputs.runtime.earned_annual_income_callable = lambda age: 80.25
+    inputs.runtime.earned_annual_income_callable = lambda age: 80
 
     result = yenwealth.simulations.FinancesSimulator(inputs).run_simulation()
 
-    assert ("withdraw", decimal.Decimal("19.75")) in investment_manager.calls
+    assert ("withdraw", decimal.Decimal(20)) in investment_manager.calls
     assert result.at[50, "cost_of_living"] == decimal.Decimal(100)
     assert isinstance(result.at[50, "cost_of_living"], decimal.Decimal)
     assert investment_manager.investment_returns == [{"S&P500": decimal.Decimal("0.07")}]
+
+
+@pytest.mark.parametrize(
+    ("callback_name", "description"),
+    [
+        ("annual_costs_callable", "Annual costs of living"),
+        ("earned_annual_income_callable", "Earned annual income"),
+    ],
+)
+def test_simulation_rejects_fractional_yen_callback_values(callback_name, description):
+
+    investment_manager = FakeInvestmentManager(
+        portfolio_value=decimal.Decimal(100),
+        after_tax_portfolio_value=decimal.Decimal(100),
+        simulation_start_year=2026
+    )
+    inputs = make_inputs(
+        investment_manager,
+        costs=decimal.Decimal(0),
+        income=decimal.Decimal(0),
+        start_age=50,
+        start_year=2026,
+        end_age=50,
+    )
+    setattr(inputs.runtime, callback_name, lambda age: decimal.Decimal("80.25"))
+
+    with pytest.raises(ValueError, match=f"{description} must be a whole-yen amount"):
+        yenwealth.simulations.FinancesSimulator(inputs).run_simulation()
 
 
 def test_callables_are_called_with_correct_ages():
@@ -388,8 +417,8 @@ def test_callables_are_called_with_correct_ages():
     )
 
     # Replace the callables with ones that record their arguments.
-    inputs.runtime.annual_costs_callable = costs
-    inputs.runtime.earned_annual_income_callable = income
+    inputs.runtime.annual_costs_callable = typing.cast(yenwealth.core.AnnualCostsOfLiving, costs)
+    inputs.runtime.earned_annual_income_callable = typing.cast(yenwealth.core.EarnedAnnualIncome, income)
 
     simulator = yenwealth.simulations.FinancesSimulator(inputs)
     simulator.run_simulation()

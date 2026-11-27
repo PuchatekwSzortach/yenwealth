@@ -15,7 +15,7 @@ import numpy
 import pandas
 import tqdm
 
-from . import constants, core, investments, numeric
+from . import constants, core, investments, utilities
 
 LOGGER = logging.getLogger(__name__)
 
@@ -170,8 +170,14 @@ class FinancesSimulator:
                     portfolio_summary = self.investment_manager.get_formatted_portfolio_summary_description()
                     LOGGER.debug(f"Portfolio value at age {current_age} - at year start:\n{portfolio_summary}")
 
-                earned_income = numeric.to_decimal(self.inputs.runtime.earned_annual_income_callable(current_age))
-                costs_of_living = numeric.to_decimal(self.inputs.runtime.annual_costs_callable(current_age))
+                earned_income = utilities.require_whole_yen(
+                    self.inputs.runtime.earned_annual_income_callable(current_age),
+                    "Earned annual income"
+                )
+                costs_of_living = utilities.require_whole_yen(
+                    self.inputs.runtime.annual_costs_callable(current_age),
+                    "Annual costs of living"
+                )
 
                 withdrawal = max(
                     costs_of_living - earned_income,
