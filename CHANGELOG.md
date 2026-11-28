@@ -1,5 +1,8 @@
 # Changelog
 
+### 1.0.0
+- updated - ready to go out of beta! This release adds no changes other than version tag to 0.10.0
+
 ### 0.10.0
 - improved - __call__ methods of AnnualCostsOfLiving and EarnedAnnualIncome protocols now use int for return value
 - improved - FinancesSimulator.run_simulation now validates that earned_income and cost_of_living callbacks provide whole yen amounts
